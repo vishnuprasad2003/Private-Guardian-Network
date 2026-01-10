@@ -1,0 +1,19 @@
+{
+  "name": "private-guardian-network",
+  "version": "1.0.0",
+  "description": "Private Wormhole Guardian Network",
+  "main": "scripts/vaa-api-server.js",
+  "scripts": {
+    "api": "node scripts/vaa-api-server.js",
+    "fetch-vaa": "node scripts/fetch-vaa.js",
+    "deploy-solana": "node scripts/deploy-solana-core.js",
+    "post-vaa-solana": "node scripts/post-vaa-solana.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "@solana/web3.js": "^1.87.6",
+    "@coral-xyz/anchor": "^0.29.0",
+    "@certusone/wormhole-sdk": "^0.10.18",
+    "bs58": "^5.0.0"
+  }
+}

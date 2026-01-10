@@ -1,0 +1,18 @@
+# Keys (NEVER commit)
+keys/*.key
+keys/*.json
+
+# Runtime data
+data/
+logs/
+*.pid
+*.sock
+
+# Local config overrides
+config/guardian.local.conf
+
+# OS
+.DS_Store
+Thumbs.db
+
+node_modules

@@ -1,0 +1,85 @@
+[
+  {
+    "type": "function",
+    "name": "setup",
+    "inputs": [
+      {
+        "name": "implementation",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "initialGuardians",
+        "type": "address[]",
+        "internalType": "address[]"
+      },
+      {
+        "name": "chainId",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "governanceChainId",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "governanceContract",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "evmChainId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "event",
+    "name": "AdminChanged",
+    "inputs": [
+      {
+        "name": "previousAdmin",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      },
+      {
+        "name": "newAdmin",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BeaconUpgraded",
+    "inputs": [
+      {
+        "name": "beacon",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Upgraded",
+    "inputs": [
+      {
+        "name": "implementation",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  }
+]

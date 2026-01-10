@@ -1,0 +1,28 @@
+[Unit]
+Description=Wormhole Guardian Node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=guardian
+Group=guardian
+WorkingDirectory=/opt/guardian
+ExecStart=/opt/guardian/scripts/start.sh --foreground
+ExecStop=/opt/guardian/scripts/stop.sh
+Restart=always
+RestartSec=10
+
+# Security
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/opt/guardian/data /opt/guardian/logs /opt/guardian/keys
+
+# Resource limits
+LimitNOFILE=65535
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target
+
