@@ -1,18 +1,52 @@
-# Keys (NEVER commit)
-keys/*.key
-keys/*.json
+# =============================================================================
+# PRIVATE GUARDIAN NETWORK - GITIGNORE
+# =============================================================================
+
+# Dependencies
+node_modules/
 
 # Runtime data
 data/
-logs/
 *.pid
 *.sock
 
-# Local config overrides
-config/guardian.local.conf
+# Logs
+logs/
+*.log
+
+# Keys (SENSITIVE - Never commit!)
+keys/
+*.key
+*.json.backup
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
 # OS
 .DS_Store
 Thumbs.db
 
-node_modules
+# Build artifacts
+build/
+dist/
+*.so
+
+# Environment files with secrets
+.env
+.env.local
+*.env.local
+
+# Test coverage
+coverage/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Config with secrets (keep example)
+config/guardian.conf
+!config/guardian.conf.example

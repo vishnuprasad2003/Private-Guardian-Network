@@ -1,0 +1,30 @@
+[Unit]
+Description=Guardian Network VAA API Server
+After=network.target guardian.service
+Wants=guardian.service
+
+[Service]
+Type=simple
+User=guardian
+Group=guardian
+WorkingDirectory=/opt/guardian-network
+ExecStart=/usr/bin/node /opt/guardian-network/src/api/server.js
+Restart=always
+RestartSec=10
+StandardOutput=append:/opt/guardian-network/logs/api.log
+StandardError=append:/opt/guardian-network/logs/api.log
+
+# Environment
+Environment=NODE_ENV=production
+Environment=PORT=3000
+
+# Security
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/guardian-network/logs
+
+[Install]
+WantedBy=multi-user.target
+

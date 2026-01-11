@@ -1,19 +1,36 @@
 {
   "name": "private-guardian-network",
   "version": "1.0.0",
-  "description": "Private Wormhole Guardian Network",
-  "main": "scripts/vaa-api-server.js",
+  "description": "Private Wormhole Guardian Network for cross-chain messaging",
+  "main": "src/api/server.js",
   "scripts": {
-    "api": "node scripts/vaa-api-server.js",
-    "fetch-vaa": "node scripts/fetch-vaa.js",
-    "deploy-solana": "node scripts/deploy-solana-core.js",
-    "post-vaa-solana": "node scripts/post-vaa-solana.js"
+    "api": "node src/api/server.js",
+    "api:dev": "node --watch src/api/server.js",
+    "fetch-vaa": "node src/cli/fetch-vaa.js",
+    "post-vaa": "node src/cli/post-vaa-solana.js",
+    "deploy-solana": "node src/cli/deploy-solana.js",
+    "lint": "eslint src/",
+    "test": "echo \"No tests yet\""
   },
+  "keywords": [
+    "wormhole",
+    "guardian",
+    "cross-chain",
+    "bridge",
+    "avalanche",
+    "solana"
+  ],
+  "author": "",
+  "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
-    "@solana/web3.js": "^1.87.6",
-    "@coral-xyz/anchor": "^0.29.0",
     "@certusone/wormhole-sdk": "^0.10.18",
-    "bs58": "^5.0.0"
+    "@coral-xyz/anchor": "^0.29.0",
+    "@solana/web3.js": "^1.87.6",
+    "bs58": "^5.0.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

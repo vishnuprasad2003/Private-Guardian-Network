@@ -1,120 +1,60 @@
-# Solana Wormhole Bridge Contracts
+# Solana Contracts
 
-## Pre-built Artifacts
+Pre-compiled Wormhole programs for Solana.
 
-The `artifacts/` directory contains pre-built Solana programs from the official Wormhole repository:
+## Files
 
-| File | Description | Size |
-|------|-------------|------|
-| `bridge.so` | Core Wormhole Bridge (required) | ~317 KB |
-| `token_bridge.so` | Token Bridge (optional) | ~516 KB |
-| `wormhole.json` | IDL for client interaction | ~18 KB |
-
-## Building from Source
-
-### Prerequisites
-
-1. **Docker** (required for reproducible builds)
-2. **Rust** (nightly-2022-02-24)
-3. **Solana CLI** (for deployment)
-
-### Build Steps
-
-```bash
-# Navigate to Wormhole repo
-cd "/home/vishnu-intain/Documents/Block Chain/Cross Chain/WormHole-Official-GitHub-Repo/solana"
-
-# Build using Docker (recommended for reproducibility)
-make artifacts SVM=solana NETWORK=devnet
-
-# Output will be in: artifacts-solana-devnet/
-```
-
-### Manual Build (without Docker)
-
-```bash
-# Install specific Rust version
-rustup install nightly-2022-02-24
-rustup default nightly-2022-02-24
-
-# Install Solana BPF tools
-cargo install --git https://github.com/solana-labs/cargo-build-bpf
-
-# Set environment variables
-export BRIDGE_ADDRESS=Bridge1p5gheXUvJ6jGWGeCsgPKgnE3YgdGKRVCMY9o
-export CHAIN_ID=1
-
-# Build
-cd bridge/program
-cargo build-bpf
-
-# Output: target/deploy/wormhole_bridge_solana.so
-```
+| File | Description |
+|------|-------------|
+| `bridge.so` | Core bridge program (BPF bytecode) |
+| `wormhole.json` | Program IDL |
+| `program-id.json` | Deployed program keypair |
+| `checksums.txt` | File checksums |
 
 ## Deployment
 
-### 1. Deploy Program to Solana
+```bash
+# 1. Generate program ID (first run)
+node src/cli/deploy-solana.js
+
+# 2. Deploy program
+solana program deploy \
+  --program-id contracts/solana/artifacts/program-id.json \
+  contracts/solana/artifacts/bridge.so \
+  --url http://localhost:8899
+
+# 3. Initialize (second run)
+export GUARDIAN_SET='["befa429d57cd18b7f8a4d91a2da9ab4af05d0fbe"]'
+node src/cli/deploy-solana.js
+```
+
+## Building from Source
 
 ```bash
-# Set Solana config
-solana config set --url http://127.0.0.1:8899  # Local validator
-# OR
-solana config set --url https://api.devnet.solana.com  # Devnet
+cd WormHole-Official-GitHub-Repo/solana
 
-# Deploy the program
-solana program deploy artifacts/bridge.so --keypair /path/to/deployer.json
+# Install Solana tools
+sh -c "$(curl -sSfL https://release.solana.com/stable/install)"
 
-# Note the program ID output!
+# Build
+cargo build-sbf
+
+# Copy artifacts
+cp target/deploy/bridge.so ../Private-Guardian-Network/contracts/solana/artifacts/
 ```
 
-### 2. Initialize the Bridge
+## Program Initialization Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `guardians` | Array of guardian public keys |
+| `fee` | Message fee in lamports |
+| `expiration_time` | Guardian set expiration |
+
+## Posting VAAs
+
+After deployment, VAAs can be posted using:
 
 ```bash
-cd "/home/vishnu-intain/Documents/Block Chain/Cross Chain/WormHole-Official-GitHub-Repo/solana/scripts"
-
-# Install dependencies
-npm install
-
-# Initialize with YOUR guardian
-npx ts-node initialize-core.ts \
-    --rpc http://127.0.0.1:8899 \
-    --bridge <PROGRAM_ID> \
-    --payer /path/to/payer.json \
-    --guardians "beFA429d57cD18b7F8A4d91A2da9AB4AF05d0FBe"
-```
-
-## Guardian Address
-
-For your private network, use the devnet guardian address:
-
-```
-0xbeFA429d57cD18b7F8A4d91A2da9AB4AF05d0FBe
-```
-
-This MUST match the guardian set on:
-- Private Geth (guardian registry)
-- Avalanche L1 contract
-
-## Verification
-
-After deployment, verify the guardian set:
-
-```bash
-# Using Solana CLI
-solana account <GUARDIAN_SET_PDA> --output json
-
-# Or check via your application
-```
-
-## File Checksums
-
-```
-84277ddcc1c5c6c7813d6ed0fd1631453527d2fc0587ed111cdf1ae623705694  bridge.so
-9fce1ebeb4e7df75d5f3e5bfee4a3bae32b50b117d44f1a7caaa9aabb95cd25a  token_bridge.so
-```
-
-Verify with:
-```bash
-cd artifacts
-sha256sum -c checksums.txt
+node src/cli/post-vaa-solana.js <chainId> <emitter> <sequence>
 ```

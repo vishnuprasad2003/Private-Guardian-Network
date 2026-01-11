@@ -1,0 +1,38 @@
+[Unit]
+Description=Private Geth Node (Guardian Registry)
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=guardian
+Group=guardian
+WorkingDirectory=/opt/guardian-network
+ExecStart=/usr/bin/geth \
+    --datadir /opt/guardian-network/data/geth \
+    --networkid 31337 \
+    --http --http.addr 0.0.0.0 --http.port 8545 \
+    --http.api eth,net,web3,personal,engine \
+    --http.corsdomain "*" \
+    --ws --ws.addr 0.0.0.0 --ws.port 8546 \
+    --ws.api eth,net,web3,personal,engine \
+    --ws.origins "*" \
+    --nodiscover \
+    --syncmode full
+Restart=always
+RestartSec=10
+StandardOutput=append:/opt/guardian-network/logs/geth.log
+StandardError=append:/opt/guardian-network/logs/geth.log
+
+# Security
+NoNewPrivileges=true
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/guardian-network/data /opt/guardian-network/logs
+
+# Resource limits
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+

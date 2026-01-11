@@ -1,0 +1,151 @@
+# =============================================================================
+# PRIVATE GUARDIAN NETWORK - CONFIGURATION TEMPLATE
+# =============================================================================
+# Copy this file to guardian.conf and edit for your environment.
+# Each VM must have a unique GUARDIAN_INDEX.
+#
+# Quick Setup:
+#   cp config/guardian.conf.example config/guardian.conf
+#   nano config/guardian.conf
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# GUARDIAN IDENTITY
+# -----------------------------------------------------------------------------
+# Unique index for this guardian (0, 1, 2, ...)
+# Each VM must have a different GUARDIAN_INDEX
+# guardian-0 is the bootstrap node
+GUARDIAN_INDEX=0
+
+# Network identifier (must be SAME across all guardians)
+NETWORK_ID="/wormhole/private/mainnet/1"
+
+# -----------------------------------------------------------------------------
+# GUARDIAN NETWORK
+# -----------------------------------------------------------------------------
+# Total number of guardians in the network
+# For testing: 1, For production: 3, 5, 7, 9, 13, or 19
+NUM_GUARDIANS=1
+
+# Quorum is automatically calculated: floor(2/3 * NUM_GUARDIANS) + 1
+# 1 guardian = 1 signature required
+# 3 guardians = 3 signatures required (all must sign)
+# 5 guardians = 4 signatures required
+# 7 guardians = 5 signatures required
+
+# -----------------------------------------------------------------------------
+# ANVIL (Local Ethereum Node)
+# -----------------------------------------------------------------------------
+# Anvil is a fast local Ethereum node from Foundry.
+# It auto-mines blocks, making it simpler than Geth for private networks.
+# All guardians must connect to the SAME Anvil instance (on VM-0).
+#
+# For single-node testing: ws://127.0.0.1:8545
+# For multi-node: ws://VM0_IP:8545
+GETH_RPC="ws://127.0.0.1:8545"
+GETH_CONTRACT="0x_YOUR_ANVIL_WORMHOLE_CONTRACT_ADDRESS"
+
+# -----------------------------------------------------------------------------
+# AVALANCHE L1 SUBNET
+# -----------------------------------------------------------------------------
+# Your Avalanche L1 subnet WebSocket endpoint
+# IMPORTANT: Must use WebSocket (ws:// or wss://), not HTTP!
+AVALANCHE_RPC="ws://YOUR_AVALANCHE_NODE_IP:PORT/ext/bc/CHAIN_ID/ws"
+AVALANCHE_CONTRACT="0x_YOUR_AVALANCHE_WORMHOLE_CONTRACT_ADDRESS"
+
+# -----------------------------------------------------------------------------
+# SOLANA CLUSTER (Optional)
+# -----------------------------------------------------------------------------
+# Leave empty if not using Solana
+SOLANA_RPC="http://YOUR_SOLANA_NODE_IP:8899"
+SOLANA_CONTRACT="YOUR_SOLANA_WORMHOLE_PROGRAM_ID"
+
+# -----------------------------------------------------------------------------
+# P2P NETWORK
+# -----------------------------------------------------------------------------
+# P2P port (same port on all VMs, different IPs)
+P2P_PORT=8999
+
+# Bootstrap peers
+# - Leave EMPTY for guardian-0 (it's the bootstrap node)
+# - For guardian-1, guardian-2, etc: Set to guardian-0's multiaddr
+# Format: /ip4/<GUARDIAN_0_IP>/udp/8999/quic-v1/p2p/<PEER_ID>
+#
+# Get PEER_ID from guardian-0 logs:
+#   grep "P2P node identity" logs/guardian-0.log
+BOOTSTRAP_PEERS=""
+
+# -----------------------------------------------------------------------------
+# API PORTS
+# -----------------------------------------------------------------------------
+# gRPC API port (for fetching VAAs)
+GRPC_PORT=7000
+
+# Metrics/status port (Prometheus metrics at /metrics)
+STATUS_PORT=6600
+
+# API server port (REST API)
+API_PORT=3000
+
+# -----------------------------------------------------------------------------
+# FILE PATHS (relative to installation directory)
+# -----------------------------------------------------------------------------
+# Guardian private signing key
+KEY_FILE="keys/guardian-${GUARDIAN_INDEX}.key"
+
+# Data directory for guardian state (BadgerDB)
+DATA_DIR="data/guardian-${GUARDIAN_INDEX}"
+
+# Log file
+LOG_FILE="logs/guardian-${GUARDIAN_INDEX}.log"
+
+# Admin socket for CLI commands
+ADMIN_SOCKET="data/guardian-${GUARDIAN_INDEX}.sock"
+
+# -----------------------------------------------------------------------------
+# LOGGING
+# -----------------------------------------------------------------------------
+# Log level: debug, info, warn, error
+LOG_LEVEL="info"
+
+# Log rotation settings (for logrotate config)
+LOG_MAX_AGE_DAYS=7
+LOG_MAX_SIZE_MB=100
+LOG_KEEP_FILES=7
+
+# -----------------------------------------------------------------------------
+# GUARDIAN ADDRESSES
+# -----------------------------------------------------------------------------
+# These are DETERMINISTIC addresses when using unsafeDevMode with
+# hostname set to guardian-0, guardian-1, etc.
+# 
+# IMPORTANT: Use these addresses when deploying Wormhole contracts!
+# 
+# If using real keys (keygen), replace with actual addresses.
+GUARDIAN_0_ADDRESS="0xbeFA429d57cD18b7F8A4d91A2da9AB4AF05d0FBe"
+GUARDIAN_1_ADDRESS="0x88D7D8B32a9105d228100E72dFFe2Fae0705D31c"
+GUARDIAN_2_ADDRESS="0x58076F561CC62A47087B567C86f986426dFCD000"
+
+# -----------------------------------------------------------------------------
+# ADVANCED SETTINGS
+# -----------------------------------------------------------------------------
+# Disable telemetry (recommended for private networks)
+DISABLE_TELEMETRY=true
+
+# UNSAFE_DEV_MODE: Set to true for private networks with custom chain IDs.
+#
+# When true:
+#   - Bypasses chain ID verification (required for custom chains)
+#   - Generates deterministic keys based on hostname (guardian-0, guardian-1, etc.)
+#   - Hostname MUST match guardian-X pattern
+#
+# When false:
+#   - Uses real keys from KEY_FILE (generate with: bin/guardian keygen)
+#   - Chain IDs must match official Wormhole chain IDs
+#
+# For private networks: true (recommended)
+# For production with official chains: false (use real keys)
+UNSAFE_DEV_MODE=true
+
+# Path to guardiand binary (optional, auto-detected if not set)
+# GUARDIAND_BIN="/path/to/guardiand"
