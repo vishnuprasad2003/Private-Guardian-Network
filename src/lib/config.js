@@ -1,6 +1,8 @@
 /**
  * Configuration Loader
  * Loads and parses guardian.conf file
+ * 
+ * SINGLE SOURCE OF TRUTH: All Node.js modules read from this loader
  */
 
 const fs = require('fs');
@@ -40,6 +42,13 @@ function loadConfig() {
 }
 
 /**
+ * Clear config cache (useful for testing or reloading)
+ */
+function clearCache() {
+    configCache = null;
+}
+
+/**
  * Get a configuration value
  * @param {string} key - Configuration key
  * @param {string} defaultValue - Default value if key not found
@@ -56,14 +65,61 @@ function get(key, defaultValue = '') {
  */
 function getGuardianAddresses() {
     const config = loadConfig();
-    const addresses = [];
     
+    // First check for comma-separated GUARDIAN_ADDRESSES
+    if (config.GUARDIAN_ADDRESSES) {
+        return config.GUARDIAN_ADDRESSES.split(',').map(a => a.trim());
+    }
+    
+    // Fallback to individual GUARDIAN_X_ADDRESS entries
+    const addresses = [];
     for (let i = 0; i < 19; i++) {
         const addr = config[`GUARDIAN_${i}_ADDRESS`];
         if (addr) addresses.push(addr);
     }
     
     return addresses;
+}
+
+/**
+ * Get guardian addresses for deployment (specific count)
+ * @param {number} count - Number of guardians to get addresses for
+ * @returns {string[]} Array of guardian addresses
+ */
+function getGuardianAddressesForCount(count) {
+    const config = loadConfig();
+    const addresses = [];
+    
+    for (let i = 0; i < count && i < 19; i++) {
+        const addr = config[`GUARDIAN_${i}_ADDRESS`];
+        if (addr) {
+            addresses.push(addr);
+        }
+    }
+    
+    if (addresses.length < count) {
+        throw new Error(`Only ${addresses.length} guardian addresses defined, but ${count} requested`);
+    }
+    
+    return addresses;
+}
+
+/**
+ * Get all 19 devnet guardian addresses
+ * @returns {Object} Map of hostname to address
+ */
+function getAllDevnetGuardians() {
+    const config = loadConfig();
+    const guardians = {};
+    
+    for (let i = 0; i < 19; i++) {
+        const addr = config[`GUARDIAN_${i}_ADDRESS`];
+        if (addr) {
+            guardians[`guardian-${i}`] = addr;
+        }
+    }
+    
+    return guardians;
 }
 
 /**
@@ -77,7 +133,7 @@ function expandVars(str, vars) {
 }
 
 /**
- * Get paths
+ * Get file paths (with variable expansion)
  */
 function getPaths() {
     const config = loadConfig();
@@ -97,11 +153,93 @@ function getPaths() {
     };
 }
 
+/**
+ * Get Anvil/Geth configuration
+ */
+function getAnvilConfig() {
+    const config = loadConfig();
+    const host = config.ANVIL_HOST || '127.0.0.1';
+    const port = config.ANVIL_PORT || '8545';
+    
+    return {
+        host,
+        port: parseInt(port),
+        chainId: parseInt(config.ANVIL_CHAIN_ID || '31337'),
+        rpcHttp: config.GETH_RPC_HTTP || `http://${host}:${port}`,
+        rpcWs: config.GETH_RPC || `ws://${host}:${port}`,
+        contract: config.GETH_CONTRACT,
+        privateKey: config.ANVIL_PRIVATE_KEY || 'ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+    };
+}
+
+/**
+ * Get Avalanche configuration
+ */
+function getAvalancheConfig() {
+    const config = loadConfig();
+    
+    return {
+        rpcHttp: config.AVALANCHE_RPC_HTTP,
+        rpcWs: config.AVALANCHE_RPC,
+        chainId: parseInt(config.AVALANCHE_CHAIN_ID || '0'),
+        contract: config.AVALANCHE_CONTRACT,
+    };
+}
+
+/**
+ * Get Solana configuration
+ */
+function getSolanaConfig() {
+    const config = loadConfig();
+    
+    return {
+        rpc: config.SOLANA_RPC || 'http://127.0.0.1:8899',
+        ws: config.SOLANA_WS || 'ws://127.0.0.1:8900',
+        contract: config.SOLANA_CONTRACT,
+        keypair: config.SOLANA_KEYPAIR || '~/.config/solana/id.json',
+    };
+}
+
+/**
+ * Get API server configuration
+ */
+function getApiConfig() {
+    const config = loadConfig();
+    
+    return {
+        port: parseInt(config.API_PORT || '3000'),
+        grpcPort: parseInt(config.GRPC_PORT || '7000'),
+        statusPort: parseInt(config.STATUS_PORT || '6600'),
+    };
+}
+
+/**
+ * Get guardian network configuration
+ */
+function getNetworkConfig() {
+    const config = loadConfig();
+    
+    return {
+        networkId: config.NETWORK_ID || '/wormhole/private/mainnet/1',
+        numGuardians: parseInt(config.NUM_GUARDIANS || '1'),
+        unsafeDevMode: config.UNSAFE_DEV_MODE === 'true',
+        testnetMode: config.TESTNET_MODE === 'true',
+    };
+}
+
 module.exports = {
     loadConfig,
+    clearCache,
     get,
     getGuardianAddresses,
+    getGuardianAddressesForCount,
+    getAllDevnetGuardians,
     getPaths,
+    getAnvilConfig,
+    getAvalancheConfig,
+    getSolanaConfig,
+    getApiConfig,
+    getNetworkConfig,
     ROOT_DIR,
     CONFIG_FILE,
 };

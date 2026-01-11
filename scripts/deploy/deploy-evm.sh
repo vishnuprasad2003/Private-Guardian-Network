@@ -26,6 +26,7 @@ ARTIFACTS="$ROOT_DIR/contracts/evm/artifacts"
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
 NC='\033[0m'
 
 if [ $# -lt 3 ]; then
@@ -90,14 +91,19 @@ NATIVE_CHAIN_ID=$(cast chain-id --rpc-url "$RPC_URL")
 echo "Native Chain ID: $NATIVE_CHAIN_ID"
 
 # Format guardian addresses for array (cast needs specific format)
-# Convert comma-separated to space-separated for cast
-GUARDIAN_LIST=$(echo "$GUARDIANS" | tr ',' ' ')
+# Convert comma-separated addresses to proper array format
+# For single guardian: [0xAddr]
+# For multiple: [0xAddr1,0xAddr2]
+GUARDIAN_ARRAY="[$(echo "$GUARDIANS" | sed 's/,/,/g')]"
+
+# Debug: Show the array format
+echo "Guardian array format: $GUARDIAN_ARRAY"
 
 # Create setup calldata
 echo "Creating setup calldata..."
 SETUP_DATA=$(cast calldata "setup(address,address[],uint16,uint16,bytes32,uint256)" \
     "$IMPL" \
-    "[$GUARDIANS]" \
+    "$GUARDIAN_ARRAY" \
     "$WORMHOLE_CHAIN_ID" \
     "$WORMHOLE_CHAIN_ID" \
     "0x0000000000000000000000000000000000000000000000000000000000000004" \
@@ -113,8 +119,26 @@ echo -e "${GREEN}Wormhole: $WORMHOLE${NC}"
 # Verify
 echo ""
 echo "Verifying deployment..."
-GUARDIAN_SET=$(cast call "$WORMHOLE" "getCurrentGuardianSetIndex()(uint32)" --rpc-url "$RPC_URL")
-echo "Guardian Set Index: $GUARDIAN_SET"
+GUARDIAN_SET_INDEX=$(cast call "$WORMHOLE" "getCurrentGuardianSetIndex()(uint32)" --rpc-url "$RPC_URL")
+echo "Guardian Set Index: $GUARDIAN_SET_INDEX"
+
+# Verify guardian set is not empty
+echo "Checking guardian set..."
+GUARDIAN_SET=$(cast call "$WORMHOLE" "getGuardianSet(uint32)(address[],uint32)" "$GUARDIAN_SET_INDEX" --rpc-url "$RPC_URL" 2>/dev/null || echo "")
+if [ -n "$GUARDIAN_SET" ]; then
+    GUARDIAN_COUNT=$(echo "$GUARDIAN_SET" | head -1 | tr ',' '\n' | grep -c "0x" || echo "0")
+    if [ "$GUARDIAN_COUNT" -eq 0 ]; then
+        echo -e "${RED}WARNING: Guardian set is empty!${NC}"
+        echo "The contract was deployed but guardian set initialization may have failed."
+        echo "You may need to use governance to update the guardian set."
+    else
+        echo -e "${GREEN}Guardian Set Size: $GUARDIAN_COUNT${NC}"
+        echo "Guardians:"
+        echo "$GUARDIAN_SET" | head -1 | tr ',' '\n' | grep "0x" | nl
+    fi
+else
+    echo -e "${YELLOW}Could not verify guardian set${NC}"
+fi
 
 echo ""
 echo "=============================================="

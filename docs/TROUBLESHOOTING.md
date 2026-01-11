@@ -137,15 +137,197 @@ curl http://localhost:3000/api/v1/guardian-set
 curl "http://localhost:3000/api/v1/vaas/6/EMITTER/0"
 ```
 
+---
+
+## Solana Issues
+
 ### Error: Custom(13) - PostVAAConsensusFailed (Solana)
 
 **Cause**: Not enough signatures on VAA. The VAA has fewer signatures than required by the Solana contract's guardian set.
 
 **Solution**: Ensure guardian set in Solana contract matches your network:
 ```bash
-# For single guardian testing
-export GUARDIAN_SET='["befa429d57cd18b7f8a4d91a2da9ab4af05d0fbe"]'
-node src/cli/deploy-solana.js
+# Check if bridge is initialized
+node src/cli/deploy-solana.js status
+
+# If not initialized, initialize with guardian set
+node src/cli/deploy-solana.js initialize
+
+# Verify guardian set matches your network
+# The guardian set in Solana must match the guardians that signed the VAA
+```
+
+### Error: Account Info is Null (Solana Bridge)
+
+**Cause**: Solana Wormhole bridge program is not deployed or initialized.
+
+**Symptoms:**
+```
+Error: account info is null
+at Object.getAccountData
+```
+
+**Solution:**
+```bash
+# 1. Check if program is deployed
+solana program show G9TA5QaG3XutR4LCCGzcfdoP6LB4e2YSp5D98vhN5cea --url http://127.0.0.1:8899
+
+# 2. If not deployed, deploy it
+solana program deploy \
+  --program-id contracts/solana/artifacts/program-id.json \
+  contracts/solana/artifacts/bridge.so \
+  --url http://127.0.0.1:8899
+
+# 3. Initialize the bridge
+node src/cli/deploy-solana.js initialize
+
+# 4. Verify initialization
+node src/cli/deploy-solana.js status
+```
+
+### Error: Simulation Failed - Attempt to Debit Account
+
+**Cause**: Solana wallet doesn't have enough SOL to pay transaction fees.
+
+**Solution:**
+```bash
+# Check balance
+solana balance $(solana address) --url http://127.0.0.1:8899
+
+# Airdrop SOL (local validator only)
+solana airdrop 10 $(solana address) --url http://127.0.0.1:8899
+
+# For production: Transfer SOL to your wallet
+```
+
+### Solana Program Not Found
+
+**Cause**: Program ID doesn't exist or program wasn't deployed.
+
+**Solution:**
+```bash
+# 1. Generate program ID (if not exists)
+node src/cli/deploy-solana.js generate
+
+# 2. Verify program-id.json exists
+ls -la contracts/solana/artifacts/program-id.json
+
+# 3. Deploy program
+solana program deploy \
+  --program-id contracts/solana/artifacts/program-id.json \
+  contracts/solana/artifacts/bridge.so \
+  --url http://127.0.0.1:8899
+
+# 4. Verify deployment
+solana program show $(cat contracts/solana/artifacts/program-id.json | jq -r '.[:32] | @base64d | .[0:32]') --url http://127.0.0.1:8899
+```
+
+### Solana Bridge Not Initialized
+
+**Cause**: Program is deployed but not initialized with guardian set.
+
+**Solution:**
+```bash
+# Check status
+node src/cli/deploy-solana.js status
+
+# If shows "Program deployed" but not initialized:
+node src/cli/deploy-solana.js initialize
+
+# Verify initialization by checking bridge account
+# (The initialize script will show transaction signature)
+```
+
+### Posted VAA Not Found on Solana
+
+**Cause**: VAA wasn't posted or posted to wrong program.
+
+**Solution:**
+```bash
+# 1. Verify VAA exists (fetch from guardian API)
+curl "http://localhost:3000/api/v1/vaas/6/EMITTER/SEQUENCE"
+
+# 2. Check VAA has enough signatures (quorum)
+# Response should show "signatures": N where N >= quorum
+
+# 3. Post VAA to Solana
+# Using Solana-WormHole API:
+curl -X POST http://localhost:8855/api/wormhole/vaa/post \
+  -H "Content-Type: application/json" \
+  -d "{\"vaaBytes\": \"VAA_HEX\"}"
+
+# 4. Verify posted VAA
+curl -X POST http://localhost:8855/api/wormhole/posted-vaa/check \
+  -H "Content-Type: application/json" \
+  -d "{\"vaaBytes\": \"VAA_HEX\"}"
+```
+
+### Solana Validator Restart Issues
+
+**Cause**: Local Solana validator was restarted, losing program state.
+
+**Solution:**
+```bash
+# After restarting validator, redeploy and reinitialize:
+
+# 1. Redeploy program
+solana program deploy \
+  --program-id contracts/solana/artifacts/program-id.json \
+  contracts/solana/artifacts/bridge.so \
+  --url http://127.0.0.1:8899
+
+# 2. Reinitialize bridge
+node src/cli/deploy-solana.js initialize
+
+# 3. Update config if program ID changed
+nano config/guardian.conf
+# Set: SOLANA_CONTRACT="NEW_PROGRAM_ID"
+
+# 4. Restart guardian (to pick up new contract)
+bin/guardian restart
+```
+
+**Note**: For production, use a persistent Solana cluster (mainnet/devnet) to avoid this issue.
+
+### Guardian Not Observing Solana
+
+**Cause**: Guardian not configured to watch Solana or Solana RPC not accessible.
+
+**Solution:**
+```bash
+# 1. Check config has Solana settings
+grep SOLANA config/guardian.conf
+
+# 2. Verify Solana RPC is accessible
+curl -X POST http://127.0.0.1:8899 \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"getHealth"}'
+
+# 3. Check guardian logs for Solana connection
+bin/guardian logs | grep -i solana
+
+# 4. Verify SOLANA_CONTRACT is set correctly
+grep SOLANA_CONTRACT config/guardian.conf
+```
+
+### VAA Parsing Error on Solana
+
+**Cause**: VAA format incorrect or corrupted.
+
+**Solution:**
+```bash
+# 1. Verify VAA format
+curl -X POST http://localhost:3000/api/v1/vaas/verify \
+  -H "Content-Type: application/json" \
+  -d "{\"vaaHex\": \"VAA_HEX\"}"
+
+# 2. Check VAA is hex (not base64)
+# Should be: 01000000000100...
+
+# 3. Ensure VAA has correct length
+# Minimum: ~200 hex characters (100 bytes)
+
+# 4. Verify emitter address is padded to 32 bytes (64 hex chars)
 ```
 
 ### VAA Signed But Not Stored

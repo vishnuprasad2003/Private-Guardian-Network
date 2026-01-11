@@ -53,6 +53,35 @@ Each guardian has:
 - **P2P Identity**: libp2p key for network communication
 - **Node Name**: Identifier (e.g., `guardian-0`)
 
+#### Guardian Naming (CRITICAL!)
+
+In **unsafeDevMode**, the guardian naming follows a **strict convention**:
+
+| Hostname | Generated Signing Address |
+|----------|--------------------------|
+| `guardian-0` | `0xbeFA429d57cD18b7F8A4d91A2da9AB4AF05d0FBe` |
+| `guardian-1` | `0x88D7D8B32a9105d228100E72dFFe2Fae0705D31c` |
+| `guardian-2` | `0x58076F561CC62A47087B567C86f986426dFCD000` |
+| `guardian-3` | `0x0000...` (continues) |
+
+**Why is this important?**
+- The guardian binary generates **deterministic** keys based on hostname
+- If hostname is `guardian-0`, it ALWAYS generates the same key
+- These addresses are **hardcoded in the Wormhole source code**
+- You **CANNOT** change these mappings!
+
+**Before starting a guardian in unsafeDevMode**:
+```bash
+sudo hostname guardian-0   # Set hostname
+hostname                   # Verify it changed
+bin/guardian start         # Start guardian (generates deterministic key)
+```
+
+**For production (non-dev mode)**:
+- Generate your own keys: `bin/guardian keygen`
+- Use any hostname you want
+- Set `UNSAFE_DEV_MODE=false` in config
+
 ### 2. VAA (Verifiable Action Approval)
 
 A **VAA** is a signed attestation that proves something happened on a source chain. It contains:
@@ -537,6 +566,186 @@ For private networks, `1` is typically sufficient.
 For this private network:
 - **Anvil (Registry)**: Uses Wormhole Chain ID **2** (Ethereum)
 - **Avalanche L1**: Uses Wormhole Chain ID **6** (Avalanche)
+- **Solana**: Uses Wormhole Chain ID **1** (Solana)
+
+---
+
+## Solana Bridge Architecture
+
+### Overview
+
+The Solana Wormhole bridge is implemented as a **Solana program** (smart contract) that:
+- Stores guardian sets
+- Accepts posted VAAs
+- Verifies VAA signatures
+- Executes cross-chain actions based on VAA payloads
+
+### Program Structure
+
+```
+Solana Wormhole Core Bridge Program
+├── Bridge Account (PDA)
+│   ├── Guardian Set Index
+│   ├── Config (fee, expiry)
+│   └── Last Lamports
+│
+├── Guardian Set Accounts (PDAs)
+│   ├── Index
+│   ├── Creation Time
+│   └── Guardian Keys (array of 20-byte addresses)
+│
+├── Fee Collector Account (PDA)
+│   └── Accumulated fees
+│
+└── Posted VAA Accounts (PDAs)
+    ├── VAA Hash
+    ├── Message Data
+    └── Timestamp
+```
+
+### Program Derived Addresses (PDAs)
+
+Solana uses PDAs (deterministic addresses) instead of regular accounts:
+
+| Account | PDA Derivation | Purpose |
+|---------|----------------|---------|
+| Bridge | `[program_id, "Bridge"]` | Main bridge state |
+| Guardian Set 0 | `[program_id, "GuardianSet", 0]` | Initial guardian set |
+| Fee Collector | `[program_id, "FeeCollector"]` | Fee collection |
+| Posted VAA | `[program_id, "PostedVAA", vaa_hash]` | Stored VAA |
+
+### Initialization Process
+
+When initializing the Solana bridge:
+
+1. **Create Bridge Account**: Stores guardian set index and config
+2. **Create Guardian Set Account**: Stores guardian addresses (20 bytes each)
+3. **Create Fee Collector**: Account to receive message fees
+4. **Set Initial Guardian Set**: Configure with your guardian addresses
+
+**Initialization Parameters:**
+- `guardianSetExpirationTime`: How long guardian set is valid (seconds)
+- `fee`: Message fee in lamports (0 for free)
+- `initialGuardians`: Array of guardian addresses (20 bytes each)
+
+**Example:**
+```javascript
+const guardians = [
+  Buffer.from('befa429d57cd18b7f8a4d91a2da9ab4af05d0fbe', 'hex') // guardian-0
+];
+
+// Initialize with:
+// - Expiry: 86400 seconds (24 hours)
+// - Fee: 0 lamports
+// - Guardians: [guardian-0 address]
+```
+
+### Posting VAAs to Solana
+
+When posting a VAA to Solana:
+
+1. **Parse VAA**: Extract guardian set index, signatures, message data
+2. **Verify Guardian Set**: Check if guardian set exists and is valid
+3. **Verify Signatures**: Validate each signature against guardian keys
+4. **Check Quorum**: Ensure enough signatures (quorum requirement)
+5. **Create Posted VAA Account**: Store VAA as PDA
+6. **Execute Action**: Process payload (if applicable)
+
+**Posted VAA Account:**
+- **Address**: Deterministic based on VAA hash
+- **Owner**: Wormhole bridge program
+- **Data**: Serialized VAA message
+- **Lamports**: Rent-exempt amount
+
+### Solana vs EVM Differences
+
+| Aspect | EVM (Avalanche) | Solana |
+|--------|-----------------|--------|
+| Contract Type | Smart Contract | Program (BPF) |
+| State Storage | Contract storage | Accounts (PDAs) |
+| Guardian Set | Stored in contract | Separate account per set |
+| VAA Verification | On-chain in contract | Program instruction |
+| Posted VAAs | Event logs | Separate accounts |
+| Fees | Gas (native token) | Lamports (SOL) |
+
+### Guardian Observation on Solana
+
+Guardians observe Solana by:
+1. **Connecting to Solana RPC**: WebSocket or HTTP
+2. **Watching Program Accounts**: Monitor Wormhole program PDAs
+3. **Detecting Messages**: Observe `postMessage` instruction calls
+4. **Signing VAAs**: Sign observed messages
+5. **Storing VAAs**: Save signed VAAs for retrieval
+
+**Solana Message Format:**
+- Messages are posted via `postMessage` instruction
+- Each message has: `emitter`, `sequence`, `payload`, `consistencyLevel`
+- Guardians observe these and create VAAs
+
+### Complete Solana Flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 1. User calls postMessage on Solana program                    │
+│    - Emitter: Program-derived address                          │
+│    - Sequence: Auto-incrementing                               │
+│    - Payload: Arbitrary bytes                                  │
+└─────────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 2. Guardian observes message                                    │
+│    - Watches Solana program accounts                           │
+│    - Detects new message                                        │
+│    - Extracts: emitter, sequence, payload                       │
+└─────────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 3. Guardian signs message                                        │
+│    - Creates VAA with signature                                 │
+│    - Broadcasts to other guardians                             │
+│    - Collects signatures until quorum                          │
+└─────────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 4. VAA is posted to Solana bridge                               │
+│    - postVAA instruction called                                 │
+│    - Program verifies signatures                                │
+│    - Creates Posted VAA account                                │
+└─────────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ 5. Posted VAA can be used                                        │
+│    - Other programs can read Posted VAA                        │
+│    - Execute cross-chain actions                                │
+│    - Complete transfers, etc.                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Solana Configuration
+
+In `config/guardian.conf`:
+
+```bash
+# Solana RPC (HTTP for deployment, WebSocket for guardian)
+SOLANA_RPC="http://127.0.0.1:8899"
+SOLANA_WS="ws://127.0.0.1:8900"
+
+# Wormhole Core Bridge program ID (after deployment)
+SOLANA_CONTRACT="G9TA5QaG3XutR4LCCGzcfdoP6LB4e2YSp5D98vhN5cea"
+
+# Deployer keypair path
+SOLANA_KEYPAIR="~/.config/solana/id.json"
+```
+
+**Important Notes:**
+- Guardian uses **WebSocket** (`SOLANA_WS`) for real-time observation
+- Deployment scripts use **HTTP** (`SOLANA_RPC`) for transactions
+- Program ID is generated once and reused
+- Keypair must have SOL for transaction fees
 
 ---
 
@@ -566,6 +775,66 @@ For this private network:
 
 ---
 
+## Configuration Architecture
+
+### Single Source of Truth
+
+All configuration is centralized in `config/guardian.conf`. This ensures:
+- Change settings in ONE place, not multiple files
+- Consistency across all scripts and services
+- Easy deployment to multiple VMs (copy one file)
+
+```
+config/guardian.conf
+        │
+        ├──► bin/guardian      (bash - sources config)
+        ├──► bin/anvil         (bash - sources config)
+        ├──► bin/deploy        (bash - sources config)
+        ├──► bin/api           (bash - sources config)
+        │
+        └──► src/lib/config.js (Node.js - parses config)
+                    │
+                    ├──► src/api/server.js
+                    ├──► src/cli/fetch-vaa.js
+                    └──► src/cli/post-vaa-solana.js
+```
+
+### Configuration Sections
+
+| Section | Purpose | When to Change |
+|---------|---------|----------------|
+| Guardian Identity | `GUARDIAN_INDEX` | Different on each VM |
+| Network Settings | `NUM_GUARDIANS` | When adding/removing guardians |
+| Anvil/Geth | `ANVIL_PORT`, `GETH_CONTRACT` | After deployment |
+| Avalanche | `AVALANCHE_RPC`, `AVALANCHE_CONTRACT` | Chain setup |
+| Solana | `SOLANA_RPC`, `SOLANA_CONTRACT` | Chain setup |
+| Ports | `P2P_PORT`, `GRPC_PORT` | Network planning |
+| Guardian Addresses | `GUARDIAN_X_ADDRESS` | Reference only (deterministic) |
+
+### Making Changes
+
+1. **Edit ONLY** `config/guardian.conf`
+2. **Restart** affected services:
+   ```bash
+   bin/guardian stop && bin/guardian start
+   bin/api stop && bin/api start
+   ```
+3. Changes take effect immediately (no rebuild needed)
+
+### Environment Variables
+
+Some settings can be overridden via environment:
+
+| Variable | Purpose | Priority |
+|----------|---------|----------|
+| `PRIVATE_KEY` | Deployer key (for security) | Env > Config |
+| `CONFIG_FILE` | Custom config path | Env only |
+| `GUARDIAND_BIN` | Custom guardiand path | Env only |
+
+**Security Note**: Never put private keys in `guardian.conf`! Use environment variables for sensitive values.
+
+---
+
 ## Glossary
 
 | Term | Definition |
@@ -580,6 +849,7 @@ For this private network:
 | **Bootstrap Peer** | First guardian that others connect to |
 | **P2P** | Peer-to-peer network between guardians |
 | **gRPC** | Protocol for VAA retrieval |
+| **Single Source of Truth** | All config in one file (`guardian.conf`) |
 
 ---
 

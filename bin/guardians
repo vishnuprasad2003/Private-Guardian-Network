@@ -1,0 +1,282 @@
+#!/bin/bash
+# =============================================================================
+# GUARDIAN MANAGEMENT SCRIPT
+# =============================================================================
+# Helps with adding, listing, and managing guardians
+# Usage: bin/guardians {list|addresses|add|info}
+# =============================================================================
+
+set -e
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Load config
+source "$ROOT_DIR/config/guardian.conf" 2>/dev/null || {
+    echo "Error: config/guardian.conf not found"
+    exit 1
+}
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# All 19 devnet guardian addresses (from Wormhole source)
+declare -A DEVNET_ADDRESSES
+DEVNET_ADDRESSES[0]="0xbeFA429d57cD18b7F8A4d91A2da9AB4AF05d0FBe"
+DEVNET_ADDRESSES[1]="0x88D7D8B32a9105d228100E72dFFe2Fae0705D31c"
+DEVNET_ADDRESSES[2]="0x58076F561CC62A47087B567C86f986426dFCD000"
+DEVNET_ADDRESSES[3]="0xBd6e9833490F8fA87c733A183CD076a6cBD29074"
+DEVNET_ADDRESSES[4]="0xb853FCF0a5C78C1b56D15fCE7a154e6ebe9ED7a2"
+DEVNET_ADDRESSES[5]="0xAF3503dBD2E37518ab04D7CE78b630F98b15b78a"
+DEVNET_ADDRESSES[6]="0x785632deA5609064803B1c8EA8bB2c77a6004Bd1"
+DEVNET_ADDRESSES[7]="0x09a281a698C0F5BA31f158585B41F4f33659e54D"
+DEVNET_ADDRESSES[8]="0x3178443AB76a60E21690DBfB17f7F59F09Ae3Ea1"
+DEVNET_ADDRESSES[9]="0x647ec26ae49b14060660504f4DA1c2059E1C5Ab6"
+DEVNET_ADDRESSES[10]="0x810AC3D8E1258Bd2F004a94Ca0cd4c68Fc1C0611"
+DEVNET_ADDRESSES[11]="0x80610e96d645b12f47ae5cf4546b18538739e90F"
+DEVNET_ADDRESSES[12]="0x2edb0D8530E31A218E72B9480202AcBaeB06178d"
+DEVNET_ADDRESSES[13]="0xa78858e5e5c4705CdD4B668FFe3Be5bae4867c9D"
+DEVNET_ADDRESSES[14]="0x5Efe3A05Efc62D60e1D19fAeB56A80223CDd3472"
+DEVNET_ADDRESSES[15]="0xD791b7D32C05aBB1cc00b6381FA0c4928f0c56fC"
+DEVNET_ADDRESSES[16]="0x14Bc029B8809069093D712A3fd4DfAb31963597e"
+DEVNET_ADDRESSES[17]="0x246Ab29FC6EBeDf2D392a51ab2Dc5C59d0902A03"
+DEVNET_ADDRESSES[18]="0x132A84dFD920b35a3D0BA5f7A0635dF298F9033e"
+
+show_list() {
+    echo "========================================"
+    echo "All Devnet Guardian Addresses"
+    echo "========================================"
+    echo "(In unsafeDevMode, hostname determines the key)"
+    echo ""
+    
+    for i in {0..18}; do
+        if [ $i -lt ${NUM_GUARDIANS:-1} ]; then
+            echo -e "${GREEN}[ACTIVE]${NC}  guardian-$i: ${DEVNET_ADDRESSES[$i]}"
+        else
+            echo -e "          guardian-$i: ${DEVNET_ADDRESSES[$i]}"
+        fi
+    done
+    
+    echo ""
+    echo -e "Currently active: ${GREEN}${NUM_GUARDIANS:-1}${NC} guardians"
+}
+
+show_addresses() {
+    local count="${1:-${NUM_GUARDIANS:-1}}"
+    
+    if [ "$count" -gt 19 ]; then
+        echo -e "${RED}Error: Maximum 19 guardians in unsafeDevMode${NC}"
+        exit 1
+    fi
+    
+    echo "Guardian addresses for $count guardians:"
+    echo ""
+    
+    local addresses=""
+    for ((i=0; i<count; i++)); do
+        if [ -n "$addresses" ]; then
+            addresses="$addresses,"
+        fi
+        addresses="${addresses}${DEVNET_ADDRESSES[$i]}"
+    done
+    
+    echo "GUARDIAN_ADDRESSES=\"$addresses\""
+    echo ""
+    echo "Copy the above line to config/guardian.conf"
+}
+
+show_add_instructions() {
+    local new_index="${1:-}"
+    
+    if [ -z "$new_index" ]; then
+        new_index=$((${NUM_GUARDIANS:-1}))
+    fi
+    
+    if [ "$new_index" -gt 18 ]; then
+        echo -e "${RED}Error: Maximum guardian index is 18 (19 total)${NC}"
+        exit 1
+    fi
+    
+    local new_count=$((new_index + 1))
+    local new_address="${DEVNET_ADDRESSES[$new_index]}"
+    
+    echo "========================================"
+    echo "Adding guardian-$new_index to Network"
+    echo "========================================"
+    echo ""
+    echo -e "${BLUE}New Guardian Info:${NC}"
+    echo "  Hostname: guardian-$new_index"
+    echo "  Address:  $new_address"
+    echo ""
+    echo -e "${YELLOW}Steps to add this guardian:${NC}"
+    echo ""
+    echo "1. On the NEW VM (guardian-$new_index):"
+    echo "   sudo hostnamectl set-hostname guardian-$new_index"
+    echo "   # Clone repo, install deps (same as other nodes)"
+    echo ""
+    echo "2. Update config/guardian.conf on ALL nodes:"
+    echo "   NUM_GUARDIANS=$new_count"
+    echo ""
+    echo "   Update GUARDIAN_ADDRESSES:"
+    
+    local addresses=""
+    for ((i=0; i<new_count; i++)); do
+        if [ -n "$addresses" ]; then
+            addresses="$addresses,"
+        fi
+        addresses="${addresses}${DEVNET_ADDRESSES[$i]}"
+    done
+    echo "   GUARDIAN_ADDRESSES=\"$addresses\""
+    echo ""
+    
+    echo "3. Stop ALL guardians:"
+    echo "   bin/guardian stop"
+    echo ""
+    echo "4. Redeploy contracts (from any node):"
+    echo "   bin/deploy anvil"
+    echo "   export PRIVATE_KEY=\"0x...\" && bin/deploy avalanche"
+    echo ""
+    echo "5. Update GETH_CONTRACT and AVALANCHE_CONTRACT in config"
+    echo ""
+    echo "6. Copy updated config to all nodes"
+    echo ""
+    echo "7. Start all guardians (guardian-0 first):"
+    echo "   sudo hostname guardian-X && bin/guardian start"
+    echo ""
+    
+    local quorum=$(( (new_count * 2 / 3) + 1 ))
+    echo -e "${GREEN}With $new_count guardians:${NC}"
+    echo "  Quorum required: $quorum signatures"
+    echo "  Fault tolerance: $((new_count - quorum)) guardian(s) can fail"
+}
+
+show_info() {
+    echo "========================================"
+    echo "Guardian Network Info"
+    echo "========================================"
+    echo ""
+    echo -e "${BLUE}Current Configuration:${NC}"
+    echo "  NUM_GUARDIANS:      ${NUM_GUARDIANS:-1}"
+    echo "  UNSAFE_DEV_MODE:    ${UNSAFE_DEV_MODE:-false}"
+    echo "  GUARDIAN_INDEX:     ${GUARDIAN_INDEX:-0}"
+    echo ""
+    
+    local quorum=$(( (${NUM_GUARDIANS:-1} * 2 / 3) + 1 ))
+    echo -e "${BLUE}Network Requirements:${NC}"
+    echo "  Quorum:             $quorum / ${NUM_GUARDIANS:-1} signatures"
+    echo "  Fault Tolerance:    $((${NUM_GUARDIANS:-1} - quorum)) guardian(s)"
+    echo ""
+    
+    echo -e "${BLUE}Active Guardian Addresses:${NC}"
+    echo "  $GUARDIAN_ADDRESSES"
+    echo ""
+    
+    echo -e "${BLUE}P2P Configuration:${NC}"
+    echo "  P2P Port:           ${P2P_PORT:-8999}"
+    if [ -z "$BOOTSTRAP_PEERS" ]; then
+        echo "  Bootstrap Peers:    (empty - this is the bootstrap node)"
+    else
+        echo "  Bootstrap Peers:    $BOOTSTRAP_PEERS"
+    fi
+    echo ""
+    
+    if [ "${UNSAFE_DEV_MODE:-false}" = "true" ]; then
+        echo -e "${YELLOW}Mode: unsafeDevMode (deterministic keys from hostname)${NC}"
+        echo "  Maximum guardians: 19"
+        echo "  Hostname must match: guardian-0, guardian-1, ... guardian-18"
+    else
+        echo -e "${YELLOW}Mode: Production (custom keys)${NC}"
+        echo "  Maximum guardians: Unlimited"
+        echo "  Use bin/guardian keygen to generate keys"
+    fi
+}
+
+show_bootstrap() {
+    local ip="${1:-}"
+    
+    echo "========================================"
+    echo "Bootstrap Peer Configuration"
+    echo "========================================"
+    echo ""
+    
+    # Try to get peer ID from logs
+    local peer_id=""
+    local log_file="$ROOT_DIR/logs/guardian-0.log"
+    
+    if [ -f "$log_file" ]; then
+        peer_id=$(grep "P2P node identity" "$log_file" | tail -1 | grep -oP '12D3KooW[a-zA-Z0-9]+' || true)
+    fi
+    
+    if [ -z "$peer_id" ]; then
+        echo -e "${YELLOW}Could not find peer ID. Is guardian-0 running?${NC}"
+        echo ""
+        echo "To get the peer ID:"
+        echo "  1. Start guardian-0: bin/guardian start"
+        echo "  2. Get peer ID: grep 'P2P node identity' logs/guardian-0.log"
+        echo ""
+        peer_id="<PEER_ID_FROM_GUARDIAN_0_LOGS>"
+    else
+        echo -e "${GREEN}Found Peer ID: $peer_id${NC}"
+    fi
+    
+    echo ""
+    
+    if [ -z "$ip" ]; then
+        # Try to get local IP
+        ip=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "<GUARDIAN-0-IP>")
+        echo -e "${YELLOW}Using detected IP: $ip${NC}"
+        echo "(Pass IP as argument if incorrect: bin/guardians bootstrap <IP>)"
+    fi
+    
+    echo ""
+    echo -e "${BLUE}Bootstrap Address for other guardians:${NC}"
+    echo ""
+    echo "BOOTSTRAP_PEERS=\"/ip4/$ip/udp/${P2P_PORT:-8999}/quic-v1/p2p/$peer_id\""
+    echo ""
+    echo "Copy this to config/guardian.conf on guardian-1, guardian-2, etc."
+    echo ""
+    echo -e "${YELLOW}Network Requirements:${NC}"
+    echo "  - Port ${P2P_PORT:-8999}/UDP must be open between all VMs"
+    echo "  - All guardians must be able to reach guardian-0's IP"
+}
+
+case "${1:-}" in
+    list)
+        show_list
+        ;;
+    addresses)
+        show_addresses "${2:-}"
+        ;;
+    add)
+        show_add_instructions "${2:-}"
+        ;;
+    info)
+        show_info
+        ;;
+    bootstrap)
+        show_bootstrap "${2:-}"
+        ;;
+    *)
+        echo "Usage: $0 {list|addresses|add|info|bootstrap}"
+        echo ""
+        echo "Commands:"
+        echo "  list              List all 19 devnet guardian addresses"
+        echo "  addresses [n]     Generate GUARDIAN_ADDRESSES for n guardians"
+        echo "  add [index]       Show instructions for adding guardian-[index]"
+        echo "  info              Show current guardian network info"
+        echo "  bootstrap [ip]    Generate BOOTSTRAP_PEERS config for other nodes"
+        echo ""
+        echo "Examples:"
+        echo "  $0 list                    # Show all available addresses"
+        echo "  $0 addresses 5             # Generate config for 5 guardians"
+        echo "  $0 add 3                   # Instructions for adding guardian-3"
+        echo "  $0 info                    # Show current network status"
+        echo "  $0 bootstrap               # Get bootstrap config (auto-detect IP)"
+        echo "  $0 bootstrap 10.0.0.10     # Get bootstrap config with specific IP"
+        exit 1
+        ;;
+esac
+

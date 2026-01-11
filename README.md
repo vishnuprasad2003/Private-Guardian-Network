@@ -90,11 +90,29 @@ export AVALANCHE_RPC_HTTP="http://your-avalanche-rpc"
 bin/deploy avalanche
 # Edit config/guardian.conf: AVALANCHE_CONTRACT="0x..."
 
-# 5. Start guardian (hostname required for unsafeDevMode)
+# 5. Deploy to Solana (optional)
+# 5a. Start Solana validator (if local)
+solana-test-validator --reset
+solana airdrop 10 $(solana address) --url http://127.0.0.1:8899
+
+# 5b. Generate program ID
+node src/cli/deploy-solana.js generate
+
+# 5c. Deploy program
+solana program deploy \
+  --program-id contracts/solana/artifacts/program-id.json \
+  contracts/solana/artifacts/bridge.so \
+  --url http://127.0.0.1:8899
+
+# 5d. Initialize bridge
+node src/cli/deploy-solana.js initialize
+# Edit config/guardian.conf: SOLANA_CONTRACT="G9TA5QaG3X..."
+
+# 6. Start guardian (hostname required for unsafeDevMode)
 sudo hostname guardian-0
 bin/guardian start
 
-# 6. Start API server
+# 7. Start API server
 bin/api start
 ```
 

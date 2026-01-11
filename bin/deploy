@@ -2,22 +2,24 @@
 # =============================================================================
 # CONTRACT DEPLOYMENT SCRIPT
 # =============================================================================
-# Deploys Wormhole contracts to EVM chains.
+# Deploys Wormhole contracts to all supported chains.
+# ALL SETTINGS ARE READ FROM config/guardian.conf
 #
-# Usage: bin/deploy <target> [guardian_addresses]
+# Usage: bin/deploy <target> [options]
 #
 # Targets:
-#   anvil      - Deploy to local Anvil node (localhost:8545)
+#   anvil      - Deploy to local Anvil node (registry)
 #   avalanche  - Deploy to Avalanche L1 subnet
+#   solana     - Deploy to Solana cluster
+#   all        - Deploy to all chains
 #
-# Environment:
-#   PRIVATE_KEY           - Deployer private key (required for avalanche)
-#   AVALANCHE_RPC_HTTP    - Avalanche HTTP RPC URL
-#   GUARDIAN_ADDRESSES    - Comma-separated guardian addresses
+# All values (guardian addresses, RPCs, chain IDs) come from guardian.conf
 #
 # Examples:
-#   bin/deploy anvil
-#   bin/deploy avalanche "0xbeFA429d57cD18b7F8A4d91A2da9AB4AF05d0FBe"
+#   bin/deploy anvil                    # Uses addresses from config
+#   bin/deploy avalanche                # Uses config + PRIVATE_KEY env var
+#   bin/deploy solana                   # Uses config + Solana keypair
+#   bin/deploy all                      # Deploy to all chains
 # =============================================================================
 
 set -e
@@ -28,92 +30,109 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m'
 
 log_info()  { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# Load config
-source "$ROOT_DIR/config/guardian.conf" 2>/dev/null || true
+# Load config (SINGLE SOURCE OF TRUTH)
+if [ ! -f "$ROOT_DIR/config/guardian.conf" ]; then
+    log_error "Configuration file not found: $ROOT_DIR/config/guardian.conf"
+    exit 1
+fi
+source "$ROOT_DIR/config/guardian.conf"
 
-# Default guardian address (devnet mode)
-DEFAULT_GUARDIAN="0xbeFA429d57cD18b7F8A4d91A2da9AB4AF05d0FBe"
-
-# Anvil pre-funded account
-ANVIL_PRIVATE_KEY="ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+# Expand shell variables that reference other variables
+GETH_RPC_HTTP="${GETH_RPC_HTTP:-http://${ANVIL_HOST:-127.0.0.1}:${ANVIL_PORT:-8545}}"
 
 show_usage() {
-    echo "Usage: $0 <target> [guardian_addresses]"
+    echo "Usage: $0 <target>"
     echo ""
     echo "Targets:"
-    echo "  anvil      Deploy to local Anvil (localhost:8545)"
+    echo "  anvil      Deploy to local Anvil (${ANVIL_HOST:-127.0.0.1}:${ANVIL_PORT:-8545})"
     echo "  avalanche  Deploy to Avalanche L1 subnet"
+    echo "  solana     Deploy to Solana cluster"
+    echo "  all        Deploy to all chains"
     echo ""
-    echo "Guardian Addresses:"
-    echo "  Single:   \"0xbeFA429d57cD18b7F8A4d91A2da9AB4AF05d0FBe\""
-    echo "  Multiple: \"0xaddr1,0xaddr2,0xaddr3\""
+    echo -e "${BLUE}Current Configuration (from config/guardian.conf):${NC}"
+    echo "  NUM_GUARDIANS:      ${NUM_GUARDIANS:-1}"
+    echo "  GUARDIAN_ADDRESSES: ${GUARDIAN_ADDRESSES:-not set}"
+    echo ""
+    echo -e "${BLUE}Chain Settings:${NC}"
+    echo "  Anvil RPC:          ${GETH_RPC_HTTP:-http://127.0.0.1:8545}"
+    echo "  Avalanche RPC:      ${AVALANCHE_RPC_HTTP:-not set}"
+    echo "  Avalanche Chain ID: ${AVALANCHE_CHAIN_ID:-not set}"
+    echo "  Solana RPC:         ${SOLANA_RPC:-http://127.0.0.1:8899}"
     echo ""
     echo "Examples:"
-    echo "  $0 anvil"
-    echo "  $0 anvil \"0xbeFA429d57cD18b7F8A4d91A2da9AB4AF05d0FBe\""
-    echo "  $0 avalanche \"0xbeFA429d57cD18b7F8A4d91A2da9AB4AF05d0FBe\""
+    echo "  $0 anvil                    # Deploy to Anvil (uses ANVIL_PRIVATE_KEY)"
+    echo "  PRIVATE_KEY=0x... $0 avalanche  # Deploy to Avalanche"
+    echo "  $0 solana                   # Deploy to Solana (uses SOLANA_KEYPAIR)"
+    echo "  PRIVATE_KEY=0x... $0 all    # Deploy to all chains"
     echo ""
     echo "Environment:"
-    echo "  PRIVATE_KEY         - Deployer private key (required for avalanche)"
-    echo "  AVALANCHE_RPC_HTTP  - Avalanche HTTP RPC (default from config)"
+    echo "  PRIVATE_KEY         - Deployer private key (for Avalanche)"
     echo ""
-    echo "Default guardian addresses (unsafeDevMode):"
-    echo "  guardian-0: 0xbeFA429d57cD18b7F8A4d91A2da9AB4AF05d0FBe"
-    echo "  guardian-1: 0x88D7D8B32a9105d228100E72dFFe2Fae0705D31c"
-    echo "  guardian-2: 0x58076F561CC62A47087B567C86f986426dFCD000"
+    echo -e "${YELLOW}Active Guardians (from config):${NC}"
+    local COUNT=0
+    IFS=',' read -ra ADDRS <<< "${GUARDIAN_ADDRESSES:-}"
+    for addr in "${ADDRS[@]}"; do
+        echo "  guardian-$COUNT: $addr"
+        COUNT=$((COUNT + 1))
+    done
+    echo ""
+    echo "  Total: $COUNT guardian(s)"
 }
 
 deploy_anvil() {
-    local GUARDIANS="${1:-$DEFAULT_GUARDIAN}"
+    # Use provided address OR config OR fallback to guardian-0
+    local GUARDIANS="${1:-${GUARDIAN_ADDRESSES:-$GUARDIAN_0_ADDRESS}}"
+    local RPC="$GETH_RPC_HTTP"
     
-    log_info "Deploying to Anvil (localhost:8545)..."
+    log_info "Deploying to Anvil..."
+    echo "  RPC: $RPC"
+    echo "  Guardians: $GUARDIANS"
     
     # Check if Anvil is running
-    if ! curl -s http://localhost:8545 > /dev/null 2>&1; then
-        log_error "Anvil not running. Start it with: bin/anvil start"
+    if ! curl -s "$RPC" > /dev/null 2>&1; then
+        log_error "Anvil not running at $RPC. Start it with: bin/anvil start"
         exit 1
     fi
     
-    export PRIVATE_KEY="$ANVIL_PRIVATE_KEY"
+    # Use Anvil pre-funded account from config
+    export PRIVATE_KEY="${ANVIL_PRIVATE_KEY:-ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}"
     
-    "$ROOT_DIR/scripts/deploy/deploy-evm.sh" geth "http://localhost:8545" "$GUARDIANS"
+    "$ROOT_DIR/scripts/deploy/deploy-evm.sh" geth "$RPC" "$GUARDIANS"
     
     echo ""
     log_info "Update config/guardian.conf with the GETH_CONTRACT address above"
 }
 
 deploy_avalanche() {
-    local GUARDIANS="${1:-$DEFAULT_GUARDIAN}"
+    local GUARDIANS="${GUARDIAN_ADDRESSES:-$GUARDIAN_0_ADDRESS}"
     
-    # Get RPC URL
+    # Get RPC URL from config
     local RPC="${AVALANCHE_RPC_HTTP:-}"
     if [ -z "$RPC" ]; then
-        # Convert WebSocket to HTTP if needed
-        if [ -n "$AVALANCHE_RPC" ]; then
-            RPC=$(echo "$AVALANCHE_RPC" | sed 's|ws://|http://|' | sed 's|/ws$|/rpc|')
-        fi
-    fi
-    
-    if [ -z "$RPC" ]; then
-        log_error "AVALANCHE_RPC_HTTP not set and couldn't determine from config"
-        echo "Set: export AVALANCHE_RPC_HTTP=\"http://your-avalanche-node/rpc\""
+        log_error "AVALANCHE_RPC_HTTP not set in config/guardian.conf"
+        echo "Add: AVALANCHE_RPC_HTTP=\"http://your-avalanche-node/rpc\""
         exit 1
     fi
     
+    # Check for deployer private key
     if [ -z "$PRIVATE_KEY" ]; then
-        log_error "PRIVATE_KEY not set"
+        log_error "PRIVATE_KEY environment variable not set"
         echo "Set: export PRIVATE_KEY=\"0x...\""
+        echo "(Do not put the private key in config files!)"
         exit 1
     fi
     
     log_info "Deploying to Avalanche..."
-    log_info "RPC: $RPC"
+    echo "  RPC: $RPC"
+    echo "  Chain ID: ${AVALANCHE_CHAIN_ID:-unknown}"
+    echo "  Guardians: $GUARDIANS"
     
     "$ROOT_DIR/scripts/deploy/deploy-evm.sh" avalanche "$RPC" "$GUARDIANS"
     
@@ -121,12 +140,124 @@ deploy_avalanche() {
     log_info "Update config/guardian.conf with the AVALANCHE_CONTRACT address above"
 }
 
+deploy_solana() {
+    log_info "Deploying to Solana..."
+    echo ""
+    echo -e "${BLUE}Configuration (from config/guardian.conf):${NC}"
+    echo "  RPC:        ${SOLANA_RPC:-http://127.0.0.1:8899}"
+    echo "  Keypair:    ${SOLANA_KEYPAIR:-~/.config/solana/id.json}"
+    echo "  Guardians:  ${GUARDIAN_ADDRESSES:-$GUARDIAN_0_ADDRESS}"
+    echo ""
+    
+    # Check Solana RPC
+    local RPC="${SOLANA_RPC:-http://127.0.0.1:8899}"
+    if ! curl -s "$RPC" -X POST -H "Content-Type: application/json" \
+         -d '{"jsonrpc":"2.0","id":1,"method":"getHealth"}' > /dev/null 2>&1; then
+        log_warn "Solana not responding at $RPC"
+        echo "  Start validator: solana-test-validator"
+        echo ""
+    fi
+    
+    # Check keypair
+    local KEYPAIR="${SOLANA_KEYPAIR:-$HOME/.config/solana/id.json}"
+    KEYPAIR="${KEYPAIR/#\~/$HOME}"
+    
+    if [ ! -f "$KEYPAIR" ]; then
+        log_error "Solana keypair not found: $KEYPAIR"
+        echo ""
+        echo "Options:"
+        echo "  1. Use default: ln -s ~/.config/solana/id.json $KEYPAIR"
+        echo "  2. Generate:    solana-keygen new -o $KEYPAIR"
+        exit 1
+    fi
+    
+    # Check for bridge.so
+    local BRIDGE_SO="$ROOT_DIR/contracts/solana/artifacts/bridge.so"
+    if [ ! -f "$BRIDGE_SO" ]; then
+        log_error "Solana bridge program not found: $BRIDGE_SO"
+        echo ""
+        echo "Build the Solana program first. See contracts/solana/README.md"
+        exit 1
+    fi
+    
+    # Run Node.js deployment script
+    log_info "Running Solana deployment..."
+    cd "$ROOT_DIR"
+    
+    # Export config for Node.js
+    export SOLANA_RPC="$RPC"
+    export SOLANA_KEYPAIR="$KEYPAIR"
+    export GUARDIAN_SET="$(echo "$GUARDIAN_ADDRESSES" | sed 's/0x//g' | jq -R 'split(",")' 2>/dev/null || echo '["befa429d57cd18b7f8a4d91a2da9ab4af05d0fbe"]')"
+    
+    node src/cli/deploy-solana.js
+    
+    echo ""
+    log_info "Update config/guardian.conf with the SOLANA_CONTRACT address above"
+}
+
+deploy_all() {
+    log_info "Deploying to ALL chains..."
+    echo ""
+    
+    # Check requirements
+    local HAS_ERROR=false
+    
+    if [ -z "$PRIVATE_KEY" ]; then
+        log_warn "PRIVATE_KEY not set - skipping Avalanche"
+        HAS_ERROR=true
+    fi
+    
+    echo ""
+    
+    # Deploy to Anvil (local registry)
+    echo "============================================"
+    echo "  1/3: ANVIL (Local Registry)"
+    echo "============================================"
+    deploy_anvil || true
+    
+    echo ""
+    
+    # Deploy to Avalanche
+    if [ -n "$PRIVATE_KEY" ]; then
+        echo "============================================"
+        echo "  2/3: AVALANCHE L1"
+        echo "============================================"
+        deploy_avalanche || true
+    else
+        echo "============================================"
+        echo "  2/3: AVALANCHE L1 (SKIPPED - no PRIVATE_KEY)"
+        echo "============================================"
+    fi
+    
+    echo ""
+    
+    # Deploy to Solana
+    echo "============================================"
+    echo "  3/3: SOLANA"
+    echo "============================================"
+    deploy_solana || true
+    
+    echo ""
+    echo "============================================"
+    log_info "Deployment complete!"
+    echo "============================================"
+    echo ""
+    echo "Remember to update config/guardian.conf with the new contract addresses."
+    echo "Then restart the guardian: bin/guardian stop && bin/guardian start"
+}
+
 case "${1:-}" in
     anvil|local)
-        deploy_anvil "${2:-}"
+        deploy_anvil
         ;;
     avalanche|avax)
-        deploy_avalanche "${2:-}"
+        deploy_avalanche
+        ;;
+    solana|sol)
+        deploy_solana
+        ;;
+    all)
+        deploy_all
         ;;
     -h|--help|help)
         show_usage

@@ -196,6 +196,96 @@ nano config/guardian.conf
 # Set: AVALANCHE_CONTRACT="0x_FROM_DEPLOYMENT"
 ```
 
+### Step 9b: Deploy and Initialize Solana Bridge (Optional)
+
+**Prerequisites:**
+- Solana validator running locally or accessible RPC
+- Solana CLI installed (`solana --version`)
+- Keypair with SOL balance (for fees)
+
+#### Step 9b.1: Start Solana Validator (Local)
+
+```bash
+# Start local Solana validator (if not already running)
+solana-test-validator --reset
+
+# In another terminal, verify it's running
+solana cluster-version --url http://127.0.0.1:8899
+
+# Airdrop SOL to your keypair (for transaction fees)
+solana airdrop 10 $(solana address) --url http://127.0.0.1:8899
+```
+
+#### Step 9b.2: Generate Program ID
+
+```bash
+# Generate Solana program ID (first time only)
+node src/cli/deploy-solana.js generate
+
+# Output will show:
+# ✅ Program ID generated: G9TA5QaG3XutR4LCCGzcfdoP6LB4e2YSp5D98vhN5cea
+# Saved to: contracts/solana/artifacts/program-id.json
+```
+
+#### Step 9b.3: Deploy Solana Program
+
+```bash
+# Deploy the Wormhole bridge program to Solana
+solana program deploy \
+  --program-id contracts/solana/artifacts/program-id.json \
+  contracts/solana/artifacts/bridge.so \
+  --url http://127.0.0.1:8899 \
+  --keypair ~/.config/solana/id.json
+
+# Output will show:
+# Program Id: G9TA5QaG3XutR4LCCGzcfdoP6LB4e2YSp5D98vhN5cea
+# ProgramData Address: ...
+# Signature: ...
+```
+
+**Note:** The `bridge.so` file must exist. If missing, build it from the Wormhole repository:
+```bash
+cd ../WormHole-Official-GitHub-Repo/solana
+cargo build-sbf
+cp target/deploy/bridge.so ../Private-Guardian-Network/contracts/solana/artifacts/
+```
+
+#### Step 9b.4: Initialize Solana Bridge
+
+```bash
+# Initialize the bridge with guardian set
+node src/cli/deploy-solana.js initialize
+
+# This will:
+# 1. Check program is deployed
+# 2. Create initialize instruction with guardian set
+# 3. Send transaction to Solana
+# 4. Output transaction signature
+
+# Expected output:
+# ✅ Solana Core Bridge Initialized!
+# Program ID: G9TA5QaG3XutR4LCCGzcfdoP6LB4e2YSp5D98vhN5cea
+# Transaction: 2NtYxD5CHQboLUABKQ9KnsuoG3UAEQuBJDZ8aXNATRYv5Ti5WUyVPjWzRqBjpVFUomub3m5eHDSBhosEWHUeBsD4
+# Guardians: 1
+# Fee: 0 lamports
+# Expiry: 86400s (24h)
+```
+
+#### Step 9b.5: Update Configuration
+
+```bash
+# Update guardian.conf with Solana contract address
+nano config/guardian.conf
+
+# Set: SOLANA_CONTRACT="G9TA5QaG3XutR4LCCGzcfdoP6LB4e2YSp5D98vhN5cea"
+```
+
+**Important Notes:**
+- The Solana bridge must be initialized before guardians can observe it
+- If you restart the Solana validator, you'll need to redeploy and reinitialize
+- For production, use a persistent Solana cluster (mainnet/devnet)
+- Ensure your Solana keypair has sufficient SOL for transaction fees
+
 ### Step 10: Start Guardian
 
 ```bash
@@ -232,6 +322,8 @@ curl http://localhost:3000/health
 
 ### Step 12: Test End-to-End
 
+#### Test 1: Publish Message on Avalanche and Fetch VAA
+
 ```bash
 # Publish a message on Avalanche
 export WORMHOLE_ADDRESS="0x_YOUR_AVALANCHE_CONTRACT"
@@ -242,7 +334,7 @@ cast send $WORMHOLE_ADDRESS "publishMessage(uint32,bytes,uint8)" \
   1 0x48656c6c6f 1 \
   --rpc-url $RPC_URL --private-key $PRIVATE_KEY
 
-# Note the transaction hash
+# Note the transaction hash and sequence number
 
 # Wait 15 seconds for guardian to observe and sign
 
@@ -252,6 +344,46 @@ cast send $WORMHOLE_ADDRESS "publishMessage(uint32,bytes,uint8)" \
 
 curl "http://localhost:3000/api/v1/vaas/6/000000000000000000000000YOUR_WALLET_ADDRESS/0"
 ```
+
+#### Test 2: Post VAA to Solana Bridge (If Solana is Deployed)
+
+```bash
+# 1. Fetch VAA (from Test 1)
+CONTRACT="0x_YOUR_ERC721_OR_EMITTER_CONTRACT"
+EMITTER=$(echo "$CONTRACT" | sed 's/0x//' | tr '[:upper:]' '[:lower:]')
+VAA_HEX=$(curl -s "http://localhost:3000/api/v1/vaas/6/0x000000000000000000000000$EMITTER/0" | jq -r '.vaa')
+
+# 2. Post VAA to Solana Bridge (using Solana-WormHole API or direct SDK)
+# Using Solana-WormHole API (if running on port 8855):
+curl -X POST http://localhost:8855/api/wormhole/vaa/post \
+  -H "Content-Type: application/json" \
+  -d "{\"vaaBytes\": \"$VAA_HEX\"}"
+
+# 3. Verify Posted VAA
+curl -X POST http://localhost:8855/api/wormhole/posted-vaa/check \
+  -H "Content-Type: application/json" \
+  -d "{\"vaaBytes\": \"$VAA_HEX\"}"
+
+# Expected response:
+# {
+#   "success": true,
+#   "data": {
+#     "exists": true,
+#     "address": "...",
+#     "vaaData": {...}
+#   }
+# }
+```
+
+**Complete Flow:**
+1. ✅ Deploy contracts (Anvil, Avalanche, Solana)
+2. ✅ Initialize Solana bridge with guardian set
+3. ✅ Start guardian and API server
+4. ✅ Publish message on Avalanche
+5. ✅ Guardian observes and signs
+6. ✅ Fetch VAA via API
+7. ✅ Post VAA to Solana bridge
+8. ✅ Verify posted VAA on Solana
 
 ---
 
@@ -661,6 +793,201 @@ Formula: `floor(2/3 * n) + 1`
 2. **Verify quorum (need all for 3 guardians)**
 3. **Check chain connections in logs**
 4. **Verify contract addresses match across all guardians**
+
+---
+
+## Scaling: Adding More Guardians
+
+### Understanding Guardian Limits
+
+| Mode | Max Guardians | Notes |
+|------|---------------|-------|
+| `unsafeDevMode=true` | 19 | Deterministic keys from hostname |
+| `unsafeDevMode=false` | Unlimited | Generate custom keys |
+
+### All Available Devnet Addresses (unsafeDevMode)
+
+These are hardcoded in Wormhole source. You CANNOT change them:
+
+| Hostname | Address |
+|----------|---------|
+| guardian-0 | 0xbeFA429d57cD18b7F8A4d91A2da9AB4AF05d0FBe |
+| guardian-1 | 0x88D7D8B32a9105d228100E72dFFe2Fae0705D31c |
+| guardian-2 | 0x58076F561CC62A47087B567C86f986426dFCD000 |
+| guardian-3 | 0xBd6e9833490F8fA87c733A183CD076a6cBD29074 |
+| guardian-4 | 0xb853FCF0a5C78C1b56D15fCE7a154e6ebe9ED7a2 |
+| guardian-5 | 0xAF3503dBD2E37518ab04D7CE78b630F98b15b78a |
+| guardian-6 | 0x785632deA5609064803B1c8EA8bB2c77a6004Bd1 |
+| guardian-7 | 0x09a281a698C0F5BA31f158585B41F4f33659e54D |
+| guardian-8 | 0x3178443AB76a60E21690DBfB17f7F59F09Ae3Ea1 |
+| guardian-9 | 0x647ec26ae49b14060660504f4DA1c2059E1C5Ab6 |
+| guardian-10 | 0x810AC3D8E1258Bd2F004a94Ca0cd4c68Fc1C0611 |
+| guardian-11 | 0x80610e96d645b12f47ae5cf4546b18538739e90F |
+| guardian-12 | 0x2edb0D8530E31A218E72B9480202AcBaeB06178d |
+| guardian-13 | 0xa78858e5e5c4705CdD4B668FFe3Be5bae4867c9D |
+| guardian-14 | 0x5Efe3A05Efc62D60e1D19fAeB56A80223CDd3472 |
+| guardian-15 | 0xD791b7D32C05aBB1cc00b6381FA0c4928f0c56fC |
+| guardian-16 | 0x14Bc029B8809069093D712A3fd4DfAb31963597e |
+| guardian-17 | 0x246Ab29FC6EBeDf2D392a51ab2Dc5C59d0902A03 |
+| guardian-18 | 0x132A84dFD920b35a3D0BA5f7A0635dF298F9033e |
+
+### Step-by-Step: Adding Guardian-3 to Existing 3-Guardian Network
+
+**IMPORTANT**: Adding guardians requires contract redeployment!
+
+#### Phase 1: Prepare New VM
+
+```bash
+# On new VM (guardian-3)
+# 1. Set hostname
+sudo hostnamectl set-hostname guardian-3
+
+# 2. Clone and setup (same as other nodes)
+git clone <repo> ~/Private-Guardian-Network
+cd ~/Private-Guardian-Network
+./scripts/setup/install-deps.sh
+
+# 3. Copy config from existing node
+scp guardian-0-vm:~/Private-Guardian-Network/config/guardian.conf ./config/
+
+# 4. Update GUARDIAN_INDEX
+sed -i 's/GUARDIAN_INDEX=0/GUARDIAN_INDEX=3/' config/guardian.conf
+```
+
+#### Phase 2: Update Configuration (ALL nodes)
+
+Edit `config/guardian.conf` on ALL nodes:
+
+```bash
+# Change NUM_GUARDIANS
+NUM_GUARDIANS=4
+
+# Update GUARDIAN_ADDRESSES to include guardian-3
+GUARDIAN_ADDRESSES="0xbeFA429d57cD18b7F8A4d91A2da9AB4AF05d0FBe,0x88D7D8B32a9105d228100E72dFFe2Fae0705D31c,0x58076F561CC62A47087B567C86f986426dFCD000,0xBd6e9833490F8fA87c733A183CD076a6cBD29074"
+```
+
+#### Phase 3: Stop All Guardians
+
+```bash
+# On each node
+bin/guardian stop
+```
+
+#### Phase 4: Redeploy Contracts
+
+This is CRITICAL - the new guardian must be in the contract's guardian set!
+
+```bash
+# From guardian-0 (or any node)
+
+# 1. Redeploy to Anvil
+bin/deploy anvil
+
+# Output: New contract address
+# Update config: GETH_CONTRACT="0x<new_address>"
+
+# 2. Redeploy to Avalanche (need PRIVATE_KEY)
+export PRIVATE_KEY="0x..."
+bin/deploy avalanche
+
+# Output: New contract address
+# Update config: AVALANCHE_CONTRACT="0x<new_address>"
+```
+
+#### Phase 5: Propagate New Config
+
+```bash
+# Copy updated config to all nodes
+scp config/guardian.conf guardian-1-vm:~/Private-Guardian-Network/config/
+scp config/guardian.conf guardian-2-vm:~/Private-Guardian-Network/config/
+scp config/guardian.conf guardian-3-vm:~/Private-Guardian-Network/config/
+```
+
+#### Phase 6: Start All Guardians
+
+```bash
+# Start guardian-0 first (bootstrap node)
+# On guardian-0:
+sudo hostname guardian-0
+bin/guardian start
+
+# Wait for it to start, get peer ID
+grep "P2P node identity" logs/guardian-0.log
+
+# Update BOOTSTRAP_PEERS in config for other nodes
+# Example: BOOTSTRAP_PEERS="/ip4/10.0.0.10/udp/8999/quic-v1/p2p/12D3KooW..."
+
+# Then start others (on each node):
+sudo hostname guardian-1  # (or guardian-2, guardian-3)
+bin/guardian start
+```
+
+#### Phase 7: Verify
+
+```bash
+# Check all guardians are running
+bin/guardian status
+
+# Check P2P connections (should see all peers)
+grep "connected to peer" logs/guardian-0.log
+
+# Test message publishing
+cast send $AVALANCHE_CONTRACT "publishMessage(uint32,bytes,uint8)" \
+  1 0x48656c6c6f 1 \
+  --rpc-url $AVALANCHE_RPC_HTTP \
+  --private-key $PRIVATE_KEY
+
+# Fetch VAA (should have 4 signatures now)
+curl http://localhost:3000/api/v1/vaas/6/<emitter>/<sequence>
+```
+
+### Quorum Reference
+
+| Guardians | Quorum | Can Tolerate Failures |
+|-----------|--------|----------------------|
+| 1 | 1 | 0 |
+| 2 | 2 | 0 |
+| 3 | 3 | 0 |
+| 4 | 3 | 1 |
+| 5 | 4 | 1 |
+| 6 | 5 | 1 |
+| 7 | 5 | 2 |
+| 9 | 7 | 2 |
+| 13 | 9 | 4 |
+| 19 | 13 | 6 |
+
+### Adding Custom Keys (Production)
+
+For more than 19 guardians OR custom keys:
+
+```bash
+# 1. Disable unsafeDevMode in config
+UNSAFE_DEV_MODE=false
+
+# 2. Generate unique key for each guardian
+bin/guardian keygen  # Saves to keys/guardian-X.key
+
+# 3. Extract address from key
+# The public address will be shown
+
+# 4. Update GUARDIAN_ADDRESSES with your custom addresses
+
+# 5. Deploy contracts with your custom guardian addresses
+
+# 6. No hostname restrictions in this mode
+```
+
+### Removing a Guardian
+
+To remove a guardian (e.g., remove guardian-2 from a 4-guardian network):
+
+1. **Update config** - Remove address from GUARDIAN_ADDRESSES
+2. **Update NUM_GUARDIANS** - Decrement count
+3. **Redeploy contracts** - With new guardian set
+4. **Stop removed guardian** - On that VM
+5. **Restart remaining guardians** - With new config
+
+**WARNING**: Removing guardians changes the quorum. Plan carefully!
 
 ---
 
