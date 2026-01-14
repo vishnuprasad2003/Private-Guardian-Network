@@ -1,52 +1,18 @@
-# =============================================================================
-# PRIVATE GUARDIAN NETWORK - GITIGNORE
-# =============================================================================
-
-# Dependencies
-node_modules/
-
 # Runtime data
 data/
-*.pid
-*.sock
-
-# Logs
 logs/
-*.log
-
-# Keys (SENSITIVE - Never commit!)
 keys/
-*.key
-*.json.backup
+*.pid
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
+# Build
+build/
+node_modules/
 
 # OS
 .DS_Store
-Thumbs.db
+*.swp
+*.swo
 
-# Build artifacts
-build/
-dist/
-*.so
-
-# Environment files with secrets
-.env
-.env.local
-*.env.local
-
-# Test coverage
-coverage/
-
-# Temporary files
-tmp/
-temp/
-*.tmp
-
-# Config with secrets (keep example)
-config/guardian.conf
-!config/guardian.conf.example
+# IDE
+.idea/
+.vscode/

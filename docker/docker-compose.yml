@@ -1,0 +1,34 @@
+services:
+  guardian-0:
+    image: ubuntu:22.04
+    container_name: guardian-0
+    hostname: guardian-0
+    network_mode: host
+    working_dir: /app
+    environment:
+      - WORKSPACE_ROOT=/app
+      - LD_LIBRARY_PATH=/usr/local/lib
+    volumes:
+      - ..:/app
+      - ../../WormHole-Official-GitHub-Repo/build/bin/guardiand:/usr/local/bin/guardiand:ro
+      - /home/vishnu-intain/go/pkg/mod/github.com/!cosm!wasm/wasmvm@v1.1.1/internal/api/libwasmvm.x86_64.so:/usr/local/lib/libwasmvm.x86_64.so:ro
+    command: ["bash", "-c", "mkdir -p /app/data/guardian-0 /app/logs /app/keys && rm -f /app/keys/guardian-0.key 2>/dev/null || true && /usr/local/bin/guardiand node --network /wormhole/private/mainnet/1 --nodeName guardian-0 --port 8999 --statusAddr 0.0.0.0:6600 --publicRPC 0.0.0.0:7000 --publicGRPCSocket /app/data/publicrpc-0.sock --adminSocket /app/data/guardian-0.sock --dataDir /app/data/guardian-0 --logLevel info --guardianKey /app/keys/guardian-0.key --nodeKey /app/keys/node-0.key --ethRPC ws://127.0.0.1:8545 --ethContract 0x2279b7a0a67db372996a5fab50d91eaa73d2ebe6 --disableTelemetry --unsafeDevMode 2>&1 | tee /app/logs/guardian-0.log"]
+    restart: unless-stopped
+
+  guardian-1:
+    image: ubuntu:22.04
+    container_name: guardian-1
+    hostname: guardian-1
+    network_mode: host
+    working_dir: /app
+    environment:
+      - WORKSPACE_ROOT=/app
+      - LD_LIBRARY_PATH=/usr/local/lib
+    volumes:
+      - ..:/app
+      - ../../WormHole-Official-GitHub-Repo/build/bin/guardiand:/usr/local/bin/guardiand:ro
+      - /home/vishnu-intain/go/pkg/mod/github.com/!cosm!wasm/wasmvm@v1.1.1/internal/api/libwasmvm.x86_64.so:/usr/local/lib/libwasmvm.x86_64.so:ro
+    command: ["bash", "-c", "sleep 10 && mkdir -p /app/data/guardian-1 /app/logs /app/keys && rm -f /app/keys/guardian-1.key 2>/dev/null || true && BOOTSTRAP=$$(cat /app/logs/guardian-0.log | grep 'Node has been started' | grep -oP 'peer_id\": \"\\K[^\"]+' | head -1) && /usr/local/bin/guardiand node --network /wormhole/private/mainnet/1 --nodeName guardian-1 --port 8998 --statusAddr 0.0.0.0:6601 --publicRPC 0.0.0.0:7001 --publicGRPCSocket /app/data/publicrpc-1.sock --adminSocket /app/data/guardian-1.sock --dataDir /app/data/guardian-1 --logLevel info --guardianKey /app/keys/guardian-1.key --nodeKey /app/keys/node-1.key --ethRPC ws://127.0.0.1:8545 --ethContract 0x2279b7a0a67db372996a5fab50d91eaa73d2ebe6 --bootstrap /ip4/127.0.0.1/udp/8999/quic-v1/p2p/$$BOOTSTRAP --disableTelemetry --unsafeDevMode 2>&1 | tee /app/logs/guardian-1.log"]
+    depends_on:
+      - guardian-0
+    restart: unless-stopped

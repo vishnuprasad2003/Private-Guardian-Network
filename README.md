@@ -1,352 +1,279 @@
 # Private Guardian Network
 
-A production-grade private Wormhole guardian network for secure cross-chain messaging between Avalanche L1 and Solana.
+A production-grade private Wormhole Guardian Network for cross-chain message passing between Avalanche L1 Subnet, Solana, and other EVM chains.
 
-## What is This?
-
-This is a **private implementation** of the Wormhole guardian network that allows you to:
-- Bridge messages between custom/private blockchains
-- Control your own guardian set (trust assumptions)
-- Operate independently from the public Wormhole network
-- Test cross-chain applications in isolation
-
-## Documentation
-
-| Document | Description |
-|----------|-------------|
-| [README.md](README.md) | This file - Quick start guide |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | **How it works** - Detailed architecture |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Multi-VM production deployment |
-| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common issues and solutions |
-
----
-
-## Quick Start (Single Node)
-
-### Prerequisites
-
-- Ubuntu 22.04 LTS
-- 4GB RAM, 2 CPU cores minimum
-- Internet access
-
-### Step 1: Install Dependencies
-
-```bash
-git clone <repo-url> Private-Guardian-Network
-cd Private-Guardian-Network
-
-# Install all dependencies (Go, Node.js, Foundry, etc.)
-./scripts/setup/install-deps.sh
-
-# IMPORTANT: Reload shell
-source ~/.bashrc
-```
-
-### Step 2: Build Guardian
-
-```bash
-# Clone Wormhole repository
-git clone https://github.com/wormhole-foundation/wormhole.git ../WormHole-Official-GitHub-Repo
-
-# Build guardiand
-cd ../WormHole-Official-GitHub-Repo/node
-go build -o ../build/bin/guardiand .
-cd -
-
-# Install Node.js packages
-npm install
-```
-
-### Step 3: Configure
-
-```bash
-cp config/guardian.conf.example config/guardian.conf
-nano config/guardian.conf
-```
-
-Key settings:
-```bash
-GUARDIAN_INDEX=0
-NUM_GUARDIANS=1
-AVALANCHE_RPC="ws://YOUR_AVALANCHE_NODE/ws"
-UNSAFE_DEV_MODE=true
-```
-
-### Step 4: Start Services
-
-```bash
-# 1. Start Anvil (local Ethereum for guardian registry)
-bin/anvil start
-
-# 2. Deploy contracts to Anvil
-bin/deploy anvil
-
-# 3. Update config with contract address
-# Edit config/guardian.conf: GETH_CONTRACT="0x..."
-
-# 4. Deploy to Avalanche (optional)
-export PRIVATE_KEY="your_deployer_key"
-export AVALANCHE_RPC_HTTP="http://your-avalanche-rpc"
-bin/deploy avalanche
-# Edit config/guardian.conf: AVALANCHE_CONTRACT="0x..."
-
-# 5. Deploy to Solana (optional)
-# 5a. Start Solana validator (if local)
-solana-test-validator --reset
-solana airdrop 10 $(solana address) --url http://127.0.0.1:8899
-
-# 5b. Generate program ID
-node src/cli/deploy-solana.js generate
-
-# 5c. Deploy program
-solana program deploy \
-  --program-id contracts/solana/artifacts/program-id.json \
-  contracts/solana/artifacts/bridge.so \
-  --url http://127.0.0.1:8899
-
-# 5d. Initialize bridge
-node src/cli/deploy-solana.js initialize
-# Edit config/guardian.conf: SOLANA_CONTRACT="G9TA5QaG3X..."
-
-# 6. Start guardian (hostname required for unsafeDevMode)
-sudo hostname guardian-0
-bin/guardian start
-
-# 7. Start API server
-bin/api start
-```
-
-### Step 5: Test
-
-```bash
-# Publish a message on Avalanche
-cast send $AVALANCHE_CONTRACT "publishMessage(uint32,bytes,uint8)" \
-  1 0x48656c6c6f 1 \
-  --rpc-url $AVALANCHE_RPC --private-key $PRIVATE_KEY
-
-# Wait 15 seconds, then fetch VAA
-curl "http://localhost:3000/api/v1/vaas/6/EMITTER_ADDRESS/SEQUENCE"
-```
-
----
-
-## Architecture Overview
+## Architecture
 
 ```
-┌─────────────────┐     ┌─────────────────────────────────┐     ┌─────────────────┐
-│  Avalanche L1   │     │       Guardian Network          │     │     Solana      │
-│     Subnet      │     │  ┌──────────┐  ┌──────────┐    │     │    (Optional)   │
-│                 │     │  │Guardian 0│◄─►│Guardian 1│    │     │                 │
-│  ┌───────────┐  │     │  └────┬─────┘  └─────┬────┘    │     │  ┌───────────┐  │
-│  │ Wormhole  │──┼─────┼───────┴──────────────┴─────────┼─────┼──│ Wormhole  │  │
-│  │ Contract  │  │     │         ▲                      │     │  │ Program   │  │
-│  └───────────┘  │     │    ┌────┴─────┐                │     │  └───────────┘  │
-└─────────────────┘     │    │  Anvil   │                │     └─────────────────┘
-                        │    │(Registry)│                │
-                        │    └──────────┘                │
-                        └─────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        PRIVATE GUARDIAN NETWORK                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   ┌───────────────┐         P2P Network         ┌───────────────┐          │
+│   │  Guardian-0   │◄───────────────────────────►│  Guardian-1   │          │
+│   │  (Bootstrap)  │    /wormhole/private/...    │               │          │
+│   │  Port: 7000   │                             │  Port: 7001   │          │
+│   └───────┬───────┘                             └───────┬───────┘          │
+│           │                                             │                   │
+│           │ Observe & Sign                              │ Observe & Sign    │
+│           ▼                                             ▼                   │
+│   ┌───────────────────────────────────────────────────────────────┐        │
+│   │                    WATCHED CHAINS                              │        │
+│   ├───────────────┬───────────────────┬───────────────────────────┤        │
+│   │    Anvil      │   Avalanche L1    │        Solana             │        │
+│   │  (Registry)   │    (Subnet)       │       (Cluster)           │        │
+│   │  127.0.0.1    │  20.253.174.32    │    20.64.169.42           │        │
+│   │  Chain ID: 2  │  Chain ID: 6      │    Chain ID: 1            │        │
+│   └───────────────┴───────────────────┴───────────────────────────┘        │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
-
-**How it works:**
-1. User publishes message on source chain (Avalanche)
-2. Guardian observes the `LogMessagePublished` event
-3. Guardian signs the message
-4. VAA (Verifiable Action Approval) is created
-5. VAA can be fetched via API and submitted to target chain
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed explanation.
-
----
 
 ## Directory Structure
 
 ```
 Private-Guardian-Network/
-├── bin/                    # Control scripts
-│   ├── anvil               # Local Ethereum node
-│   ├── guardian            # Guardian node
-│   ├── api                 # REST API server
-│   ├── deploy              # Contract deployment
-│   └── update              # Update components
-├── config/
-│   ├── guardian.conf       # Main configuration
-│   └── guardian.conf.example
+├── configs/
+│   ├── guardian-0.conf      # Bootstrap node configuration
+│   └── guardian-1.conf      # Additional node configuration
 ├── contracts/
-│   ├── evm/artifacts/      # Compiled EVM contracts
-│   └── solana/artifacts/   # Compiled Solana programs
-├── data/                   # Runtime data
-│   ├── guardian-X/         # Guardian state (BadgerDB)
-│   └── anvil-state.json    # Anvil blockchain state
-├── docs/                   # Documentation
-│   ├── ARCHITECTURE.md     # How it works
-│   ├── DEPLOYMENT.md       # Production setup
-│   └── TROUBLESHOOTING.md  # Common issues
-├── keys/                   # Key storage
-│   └── guardian-X.key      # Guardian signing keys
-├── logs/                   # Log files
+│   ├── evm/                  # Wormhole EVM contract bytecode
+│   └── solana/               # Wormhole Solana program binary
 ├── scripts/
-│   ├── setup/              # VM setup
-│   └── deploy/             # Contract deployment
-├── src/                    # Node.js source
-│   ├── api/                # REST API
-│   ├── cli/                # CLI tools
-│   └── lib/                # Libraries
-└── systemd/                # Service files
+│   ├── common.sh             # Shared utilities
+│   ├── start-guardian.sh     # Start guardian node
+│   ├── stop-guardian.sh      # Stop guardian node
+│   ├── start-anvil.sh        # Start Anvil (registry)
+│   ├── stop-anvil.sh         # Stop Anvil
+│   ├── deploy-evm.sh         # Deploy contracts to EVM chains
+│   └── deploy-solana.sh      # Deploy Wormhole to Solana
+├── docker/
+│   └── docker-compose.yml    # Docker deployment
+├── data/                     # Runtime data (gitignored)
+├── keys/                     # Guardian keys (gitignored)
+├── logs/                     # Log files (gitignored)
+├── Makefile                  # Build automation
+└── README.md
 ```
 
----
+## Prerequisites
 
-## Commands
+- Ubuntu 22.04 LTS
+- Go 1.21+
+- Foundry (cast, anvil)
+- Docker (optional)
+- grpcurl (for VAA fetching)
 
-### Service Control
+### Install Dependencies
 
 ```bash
-# Anvil (Local Ethereum)
-bin/anvil start|stop|restart|status|logs
+# Install Foundry
+curl -L https://foundry.paradigm.xyz | bash
+foundryup
 
-# Guardian Node
-bin/guardian start|stop|restart|status|logs|keygen
+# Install grpcurl
+go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
+export PATH="$HOME/go/bin:$PATH"
 
-# API Server
-bin/api start|stop|restart|status|logs
+# Build guardiand (from WormHole-Official-GitHub-Repo)
+cd ../WormHole-Official-GitHub-Repo/node
+go build -o ../build/bin/guardiand .
 ```
 
-### Deployment
+## Quick Start
+
+### Step 1: Start Anvil (Guardian Registry)
 
 ```bash
-# Deploy to Anvil (local)
-bin/deploy anvil
-
-# Deploy to Avalanche
-export PRIVATE_KEY="..."
-export AVALANCHE_RPC_HTTP="..."
-bin/deploy avalanche
+./scripts/start-anvil.sh
 ```
 
-### Updates
+### Step 2: Configure Deployer Keys
+
+Edit `configs/guardian-0.conf`:
+```bash
+# Avalanche deployer key (funded account)
+AVALANCHE_DEPLOYER_KEY="your_avalanche_private_key"
+
+# Solana deployer key (faucet keypair)
+SOLANA_DEPLOYER_KEY="../Solana-Validator-Node/keys/faucet.json"
+```
+
+### Step 3: Deploy Contracts
 
 ```bash
-bin/update version    # Show versions
-bin/update anvil      # Update Foundry
-bin/update guardian   # Rebuild guardian
-bin/update node       # Update npm packages
-bin/update all        # Update everything
+# Deploy to Anvil (guardian registry)
+make deploy-anvil
+
+# Deploy to Avalanche L1
+make deploy-avalanche
+
+# Deploy to Solana (optional)
+make deploy-solana
 ```
 
----
+### Step 4: Update Contract Addresses
 
-## API Endpoints
+After each deployment, update `configs/guardian-0.conf` and `configs/guardian-1.conf`:
+```bash
+GETH_CONTRACT="0x..."          # From deploy-anvil output
+AVALANCHE_CONTRACT="0x..."     # From deploy-avalanche output
+SOLANA_CONTRACT="..."          # From deploy-solana output (Program ID)
+```
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /health` | Health check |
-| `GET /api/v1/vaas/:chain/:emitter/:seq` | Get VAA |
-| `POST /api/v1/vaas/verify` | Verify VAA |
-| `GET /api/v1/guardian-set` | Get guardian set |
-| `GET /api/v1/chains` | List chains |
-| `GET /api/v1/status` | Node status |
-| `GET /api/v1/metrics` | Prometheus metrics |
+### Step 5: Start Guardian Nodes
 
-### Example
+**Terminal 1 - Guardian-0:**
+```bash
+sudo hostname guardian-0
+./scripts/start-guardian.sh configs/guardian-0.conf
+```
+
+Note the **Peer ID** from the output.
+
+**Terminal 2 - Guardian-1:**
+```bash
+# Update configs/guardian-1.conf with BOOTSTRAP_PEERS from guardian-0
+# BOOTSTRAP_PEERS="/ip4/127.0.0.1/udp/8999/quic-v1/p2p/<PEER_ID>"
+
+sudo hostname guardian-1
+./scripts/start-guardian.sh configs/guardian-1.conf
+```
+
+### Step 6: Publish Message & Fetch VAA
 
 ```bash
-# Get VAA
-curl http://localhost:3000/api/v1/vaas/6/000000000000000000000000c60b683d1835b72a1f3cdae3ac29b49607f0176d/0
+# Publish message to Avalanche
+cast send "$AVALANCHE_CONTRACT" \
+  "publishMessage(uint32,bytes,uint8)(uint64)" 1 "0x48656c6c6f" 1 \
+  --rpc-url "$AVALANCHE_RPC_HTTP" \
+  --private-key "$PRIVATE_KEY"
 
-# Response
-{
-  "vaa": "01000000000100...",
-  "messageId": "6/.../0",
-  "parsed": {
-    "version": 1,
-    "emitterChain": 6,
-    "sequence": 0,
-    "payload": "48656c6c6f",
-    "payloadText": "Hello"
-  }
-}
+# Get emitter address
+EMITTER=$(cast wallet address --private-key "$PRIVATE_KEY" | sed 's/0x//' | tr '[:upper:]' '[:lower:]')
+
+# Fetch VAA (wait ~60s for finality)
+grpcurl -plaintext \
+  -import-path "../WormHole-Official-GitHub-Repo/proto" \
+  -proto publicrpc/v1/publicrpc.proto \
+  -d "{\"message_id\": {\"emitter_chain\": 6, \"emitter_address\": \"000000000000000000000000$EMITTER\", \"sequence\": 0}}" \
+  localhost:7000 publicrpc.v1.PublicRPCService/GetSignedVAA
 ```
 
----
+## Configuration Reference
 
-## Configuration
+### Chain Configuration
 
-Key settings in `config/guardian.conf`:
+| Chain | Wormhole ID | RPC | Deployment |
+|-------|-------------|-----|------------|
+| Anvil (Registry) | 2 | ws://127.0.0.1:8545 | `make deploy-anvil` |
+| Avalanche L1 | 6 | ws://20.253.174.32:80/ext/bc/.../ws | `make deploy-avalanche` |
+| Solana | 1 | http://20.64.169.42:8899 | `make deploy-solana` |
 
-| Setting | Description | Example |
-|---------|-------------|---------|
-| `GUARDIAN_INDEX` | Unique per VM (0, 1, 2...) | `0` |
-| `NUM_GUARDIANS` | Total in network | `3` |
-| `GETH_RPC` | Anvil WebSocket | `ws://127.0.0.1:8545` |
-| `GETH_CONTRACT` | Wormhole on Anvil | `0x...` |
-| `AVALANCHE_RPC` | Avalanche WebSocket | `ws://node/ws` |
-| `AVALANCHE_CONTRACT` | Wormhole on Avalanche | `0x...` |
-| `BOOTSTRAP_PEERS` | P2P bootstrap (empty for guardian-0) | `/ip4/.../p2p/...` |
-| `UNSAFE_DEV_MODE` | Required for custom chains | `true` |
+### Guardian Addresses (unsafeDevMode)
 
----
+In `unsafeDevMode`, guardian keys are deterministic based on hostname:
 
-## Multi-Node Production
+| Hostname | Guardian Address |
+|----------|------------------|
+| guardian-0 | `0xbeFA429d57cD18b7F8A4d91A2da9AB4AF05d0FBe` |
+| guardian-1 | `0x88D7D8B32a9105d228100E72dFFe2Fae0705D31c` |
 
-For production deployment with multiple guardians:
+### Ports
 
-1. **VM-0**: Anvil + Guardian-0 (bootstrap) + API
-2. **VM-1**: Guardian-1
-3. **VM-2**: Guardian-2
+| Service | Guardian-0 | Guardian-1 |
+|---------|------------|------------|
+| P2P | 8999/udp | 8998/udp |
+| gRPC | 7000 | 7001 |
+| Status | 6600 | 6601 |
 
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed instructions.
+## API Reference
 
-### Quorum Requirements
+### Fetch VAA
 
-| Guardians | Required Signatures |
-|-----------|---------------------|
-| 1 | 1 |
-| 3 | 3 |
-| 5 | 4 |
-| 7 | 5 |
+```bash
+grpcurl -plaintext \
+  -import-path "../WormHole-Official-GitHub-Repo/proto" \
+  -proto publicrpc/v1/publicrpc.proto \
+  -d '{"message_id": {"emitter_chain": 6, "emitter_address": "000000000000000000000000<address>", "sequence": 0}}' \
+  localhost:7000 publicrpc.v1.PublicRPCService/GetSignedVAA
+```
 
----
+### Get Guardian Set
 
-## File Locations
+```bash
+grpcurl -plaintext \
+  -import-path "../WormHole-Official-GitHub-Repo/proto" \
+  -proto publicrpc/v1/publicrpc.proto \
+  localhost:7000 publicrpc.v1.PublicRPCService/GetCurrentGuardianSet
+```
 
-| Type | Path | Backup Priority |
-|------|------|-----------------|
-| Guardian keys | `keys/guardian-X.key` | **Critical** |
-| Anvil state | `data/anvil-state.json` | **Critical** |
-| Config | `config/guardian.conf` | High |
-| Guardian data | `data/guardian-X/` | Low (can rebuild) |
-| Logs | `logs/` | Low |
+### Get Heartbeats
 
----
+```bash
+grpcurl -plaintext \
+  -import-path "../WormHole-Official-GitHub-Repo/proto" \
+  -proto publicrpc/v1/publicrpc.proto \
+  localhost:7000 publicrpc.v1.PublicRPCService/GetLastHeartbeats
+```
+
+## Multi-Node Production Setup
+
+For production with multiple VMs:
+
+### VM-0 (Bootstrap Guardian)
+```bash
+# configs/guardian-0.conf
+GUARDIAN_INDEX=0
+ANVIL_HOST="<VM-0-IP>"  # or 127.0.0.1 if Anvil on same VM
+BOOTSTRAP_PEERS=""
+
+sudo hostname guardian-0
+./scripts/start-guardian.sh configs/guardian-0.conf
+```
+
+### VM-1 (Additional Guardian)
+```bash
+# configs/guardian-1.conf
+GUARDIAN_INDEX=1
+ANVIL_HOST="<VM-0-IP>"  # Connect to VM-0's Anvil
+BOOTSTRAP_PEERS="/ip4/<VM-0-IP>/udp/8999/quic-v1/p2p/<PEER_ID>"
+
+sudo hostname guardian-1
+./scripts/start-guardian.sh configs/guardian-1.conf
+```
 
 ## Troubleshooting
 
-### "hostname does not appear to be a devnet host"
+### Hostname Error
+```
+failed to generate devnet guardian key: hostname X does not appear to be a devnet host
+```
+**Solution:** Set hostname to `guardian-N` format:
 ```bash
 sudo hostname guardian-0
 ```
 
-### VAA not found
-1. Check guardian is running: `bin/guardian status`
-2. Check logs: `bin/guardian logs -f`
-3. Wait 15 seconds after publishing
+### Permission Denied on Database
+```
+Cannot write pid file ... permission denied
+```
+**Solution:** Clean up data directory:
+```bash
+sudo rm -rf data/guardian-*
+```
 
-### Chain ID mismatch
-Set `UNSAFE_DEV_MODE=true` in config
+### Chain ID Mismatch
+```
+evm chain ID miss match, expected 1, received 31337
+```
+**Solution:** Ensure `--unsafeDevMode` flag is enabled (bypasses chain ID verification).
 
-See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for more.
-
----
-
-## Security Notes
-
-1. **Guardian Keys**: Store securely, backup encrypted
-2. **unsafeDevMode**: Only for private networks with custom chain IDs
-3. **Firewall**: Restrict access to guardian ports
-4. **Monitoring**: Set up alerts for guardian downtime
-
----
+### VAA Not Found
+- Wait for block finality (~60 seconds for Avalanche)
+- Check guardian logs: `grep "found new message" logs/guardian-0.log`
+- Verify quorum: `grep "signed VAA" logs/guardian-0.log`
 
 ## License
 
-MIT
+Apache 2.0
