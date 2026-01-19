@@ -1,4 +1,4 @@
-.PHONY: help install start-anvil stop-anvil deploy-anvil deploy-avalanche deploy-solana start stop logs clean
+.PHONY: help install start-anvil stop-anvil deploy-anvil deploy-avalanche deploy-solana start stop logs clean upgrade upgrade-check upgrade-status
 
 help:
 	@echo "Private Guardian Network"
@@ -19,8 +19,15 @@ help:
 	@echo "Guardian Nodes:"
 	@echo "  make start-0            Start guardian-0 (sudo hostname guardian-0 first)"
 	@echo "  make start-1            Start guardian-1 (sudo hostname guardian-1 first)"
+	@echo "  make start-2            Start guardian-2 (sudo hostname guardian-2 first)"
 	@echo "  make stop               Stop all guardians"
 	@echo "  make logs               Show guardian logs"
+	@echo ""
+	@echo "Upgrade & Maintenance:"
+	@echo "  make upgrade            Full upgrade (backup + update + verify)"
+	@echo "  make upgrade-check      Check for available updates"
+	@echo "  make upgrade-status     Show current version and status"
+	@echo "  make backup             Create backup before manual changes"
 	@echo ""
 	@echo "Utilities:"
 	@echo "  make clean              Clean data, logs, keys"
@@ -59,6 +66,9 @@ start-0:
 start-1:
 	@./scripts/start-guardian.sh configs/guardian-1.conf
 
+start-2:
+	@./scripts/start-guardian.sh configs/guardian-2.conf
+
 stop:
 	@pkill -f guardiand 2>/dev/null || true
 	@rm -f *.pid
@@ -73,3 +83,24 @@ clean:
 	@sudo rm -rf data/* 2>/dev/null || rm -rf data/* 2>/dev/null || true
 	@rm -rf logs/* keys/* *.pid 2>/dev/null || true
 	@echo "Cleaned data, logs, keys, and pid files"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Upgrade & Maintenance
+# ─────────────────────────────────────────────────────────────────────────────
+
+upgrade:
+	@./scripts/upgrade.sh all
+
+upgrade-check:
+	@./scripts/upgrade.sh check
+
+upgrade-status:
+	@./scripts/upgrade.sh status
+
+backup:
+	@./scripts/upgrade.sh backup
+
+rollback:
+	@./scripts/upgrade.sh list-backups
+	@echo ""
+	@echo "Usage: ./scripts/upgrade.sh rollback backups/<timestamp>"

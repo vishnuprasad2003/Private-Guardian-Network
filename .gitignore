@@ -4,9 +4,16 @@ logs/
 keys/
 *.pid
 
+# Deployment artifacts
+contracts/solana/program-id.json
+contracts/solana/program-keypair.json
+
 # Build
 build/
 node_modules/
+
+# Backups (from upgrade script)
+backups/
 
 # OS
 .DS_Store
