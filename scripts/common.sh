@@ -21,14 +21,14 @@ load_config() {
     [[ ! -f "$config_file" ]] && { log_error "Config not found: $config_file"; return 1; }
     source "$config_file"
     
-    # Resolve paths
-    KEY_FILE="${WORKSPACE_ROOT}/${KEY_FILE}"
-    NODE_KEY_FILE="${WORKSPACE_ROOT}/${NODE_KEY_FILE}"
-    DATA_DIR="${WORKSPACE_ROOT}/${DATA_DIR}"
-    LOG_FILE="${WORKSPACE_ROOT}/${LOG_FILE}"
-    ADMIN_SOCKET="${WORKSPACE_ROOT}/${ADMIN_SOCKET}"
-    GRPC_SOCKET="${WORKSPACE_ROOT}/${GRPC_SOCKET}"
-    PID_FILE="${WORKSPACE_ROOT}/${PID_FILE}"
+    # Resolve paths (only prepend WORKSPACE_ROOT if path is relative)
+    [[ "$KEY_FILE" != /* ]] && KEY_FILE="${WORKSPACE_ROOT}/${KEY_FILE}"
+    [[ "$NODE_KEY_FILE" != /* ]] && NODE_KEY_FILE="${WORKSPACE_ROOT}/${NODE_KEY_FILE}"
+    [[ "$DATA_DIR" != /* ]] && DATA_DIR="${WORKSPACE_ROOT}/${DATA_DIR}"
+    [[ "$LOG_FILE" != /* ]] && LOG_FILE="${WORKSPACE_ROOT}/${LOG_FILE}"
+    [[ "$ADMIN_SOCKET" != /* ]] && ADMIN_SOCKET="${WORKSPACE_ROOT}/${ADMIN_SOCKET}"
+    [[ "$GRPC_SOCKET" != /* ]] && GRPC_SOCKET="${WORKSPACE_ROOT}/${GRPC_SOCKET}"
+    [[ "$PID_FILE" != /* ]] && PID_FILE="${WORKSPACE_ROOT}/${PID_FILE}"
     [[ "$GUARDIAND_BIN" != /* ]] && GUARDIAND_BIN="${WORKSPACE_ROOT}/${GUARDIAND_BIN}"
 }
 

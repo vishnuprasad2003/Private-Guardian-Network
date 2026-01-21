@@ -16,7 +16,7 @@ CONFIG="${WORKSPACE_ROOT}/configs/guardian-0.conf"
 
 SOLANA_RPC="${SOLANA_RPC:-http://localhost:8899}"
 SOLANA_KEYPAIR="${SOLANA_DEPLOYER_KEY:-../Solana-Validator-Node/keys/faucet.json}"
-CONTRACTS_DIR="${WORKSPACE_ROOT}/contracts/solana"
+CONTRACTS_DIR="/solana/wormhole/contracts/solana"
 PROGRAM_SO="${CONTRACTS_DIR}/bridge.so"
 PROGRAM_ID_FILE="${CONTRACTS_DIR}/program-id.json"
 

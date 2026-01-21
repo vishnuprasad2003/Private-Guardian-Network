@@ -1,4 +1,5 @@
-# Runtime data
+# Runtime data (stored in /solana/wormhole)
+/solana/wormhole/
 data/
 logs/
 keys/
@@ -14,6 +15,7 @@ node_modules/
 
 # Backups (from upgrade script)
 backups/
+/solana/wormhole/backups/
 
 # OS
 .DS_Store

@@ -6,7 +6,16 @@ set -euo pipefail
 source "$(dirname "$0")/common.sh"
 
 GUARDIAN_NAME="${1:-guardian-0}"
-PID_FILE="${WORKSPACE_ROOT}/${GUARDIAN_NAME}.pid"
+GUARDIAN_INDEX="${GUARDIAN_NAME##guardian-}"
+CONFIG="${WORKSPACE_ROOT}/configs/${GUARDIAN_NAME}.conf"
+
+# Load config to get PID_FILE path
+if [[ -f "$CONFIG" ]]; then
+    load_config "$CONFIG"
+else
+    # Fallback to absolute path if config not found
+    PID_FILE="/solana/wormhole/${GUARDIAN_NAME}.pid"
+fi
 
 is_running "$PID_FILE" || { log_warn "Not running"; exit 0; }
 

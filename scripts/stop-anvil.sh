@@ -5,7 +5,7 @@
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
 
-PID_FILE="${WORKSPACE_ROOT}/anvil.pid"
+PID_FILE="/solana/wormhole/anvil.pid"
 is_running "$PID_FILE" || { log_warn "Not running"; exit 0; }
 
 PID=$(cat "$PID_FILE")

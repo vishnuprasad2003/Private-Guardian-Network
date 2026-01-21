@@ -14,7 +14,7 @@ source "${SCRIPT_DIR}/common.sh"
 
 # Configuration
 WORMHOLE_REPO="${WORKSPACE_ROOT}/../WormHole-Official-GitHub-Repo"
-BACKUP_DIR="${WORKSPACE_ROOT}/backups"
+BACKUP_DIR="/solana/wormhole/backups"
 GUARDIAND_BIN="${WORMHOLE_REPO}/build/bin/guardiand"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
@@ -135,14 +135,14 @@ create_backup() {
     fi
     
     # Backup keys (encrypted or as-is)
-    if [[ -d "${WORKSPACE_ROOT}/keys" ]]; then
-        cp -r "${WORKSPACE_ROOT}/keys" "${backup_path}/"
+    if [[ -d "/solana/wormhole/keys" ]]; then
+        cp -r "/solana/wormhole/keys" "${backup_path}/"
         log_info "✓ Keys backed up"
     fi
     
     # Backup contracts
-    if [[ -d "${WORKSPACE_ROOT}/contracts" ]]; then
-        cp -r "${WORKSPACE_ROOT}/contracts" "${backup_path}/"
+    if [[ -d "/solana/wormhole/contracts" ]]; then
+        cp -r "/solana/wormhole/contracts" "${backup_path}/"
         log_info "✓ Contracts backed up"
     fi
     

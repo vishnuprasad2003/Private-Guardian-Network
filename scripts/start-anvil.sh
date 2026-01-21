@@ -10,9 +10,9 @@ source "$(dirname "$0")/common.sh"
 PORT="${ANVIL_PORT:-8545}"
 HOST="${ANVIL_HOST:-0.0.0.0}"
 CHAIN_ID="${ANVIL_CHAIN_ID:-31337}"
-PID_FILE="${WORKSPACE_ROOT}/anvil.pid"
-LOG_FILE="${WORKSPACE_ROOT}/logs/anvil.log"
-STATE_FILE="${WORKSPACE_ROOT}/data/anvil-state.json"
+PID_FILE="/solana/wormhole/anvil.pid"
+LOG_FILE="/solana/wormhole/logs/anvil.log"
+STATE_FILE="/solana/wormhole/data/anvil-state.json"
 
 command_exists anvil || { log_error "Anvil not installed. Install: curl -L https://foundry.paradigm.xyz | bash && foundryup"; exit 1; }
 is_running "$PID_FILE" && { log_warn "Already running"; exit 1; }

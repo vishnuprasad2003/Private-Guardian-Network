@@ -71,18 +71,20 @@ start-2:
 
 stop:
 	@pkill -f guardiand 2>/dev/null || true
-	@rm -f *.pid
+	@rm -f /solana/wormhole/*.pid /solana/wormhole/anvil.pid 2>/dev/null || true
 	@echo "Stopped all guardians"
 
 logs:
-	@echo "=== Guardian-0 ===" && tail -20 logs/guardian-0.log 2>/dev/null || echo "No logs"
+	@echo "=== Guardian-0 ===" && tail -20 /solana/wormhole/logs/guardian-0.log 2>/dev/null || echo "No logs"
 	@echo ""
-	@echo "=== Guardian-1 ===" && tail -20 logs/guardian-1.log 2>/dev/null || echo "No logs"
+	@echo "=== Guardian-1 ===" && tail -20 /solana/wormhole/logs/guardian-1.log 2>/dev/null || echo "No logs"
+	@echo ""
+	@echo "=== Guardian-2 ===" && tail -20 /solana/wormhole/logs/guardian-2.log 2>/dev/null || echo "No logs"
 
 clean:
-	@sudo rm -rf data/* 2>/dev/null || rm -rf data/* 2>/dev/null || true
-	@rm -rf logs/* keys/* *.pid 2>/dev/null || true
-	@echo "Cleaned data, logs, keys, and pid files"
+	@sudo rm -rf /solana/wormhole/data/* 2>/dev/null || rm -rf /solana/wormhole/data/* 2>/dev/null || true
+	@rm -rf /solana/wormhole/logs/* /solana/wormhole/keys/* /solana/wormhole/*.pid 2>/dev/null || true
+	@echo "Cleaned data, logs, keys, and pid files from /solana/wormhole"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Upgrade & Maintenance

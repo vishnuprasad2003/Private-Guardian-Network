@@ -65,7 +65,7 @@ Private-Guardian-Network/
 └── .gitignore                 # Git ignore rules
 ```
 
-**Note**: Runtime directories (`data/`, `logs/`, `keys/`, `backups/`) are gitignored and created automatically.
+**Note**: Runtime directories are stored in `/solana/wormhole/` (`data/`, `logs/`, `keys/`, `backups/`, `contracts/`) and are gitignored. They are created automatically.
 
 ## Prerequisites
 
@@ -309,7 +309,7 @@ Cannot write pid file ... permission denied
 ```
 **Solution:** Clean up data directory:
 ```bash
-sudo rm -rf data/guardian-*
+sudo rm -rf /solana/wormhole/data/guardian-*
 ```
 
 ### Chain ID Mismatch
@@ -320,8 +320,8 @@ evm chain ID miss match, expected 1, received 31337
 
 ### VAA Not Found
 - Wait for block finality (~60 seconds for Avalanche)
-- Check guardian logs: `grep "found new message" logs/guardian-0.log`
-- Verify quorum: `grep "signed VAA" logs/guardian-0.log`
+- Check guardian logs: `grep "found new message" /solana/wormhole/logs/guardian-0.log`
+- Verify quorum: `grep "signed VAA" /solana/wormhole/logs/guardian-0.log`
 
 ## Upgrading Dependencies
 
@@ -387,7 +387,7 @@ make backup
 ./scripts/upgrade.sh list-backups
 
 # Rollback to specific backup
-./scripts/upgrade.sh rollback backups/20260115_120000
+./scripts/upgrade.sh rollback /solana/wormhole/backups/20260115_120000
 
 # Clean old backups (keep last 5)
 ./scripts/upgrade.sh cleanup 5
@@ -446,10 +446,11 @@ make upgrade-status
 
 ## Notes
 
-- **Keys**: Stored in `keys/` directory (gitignored, never committed)
-- **Data**: Stored in `data/` directory (gitignored, guardian database)
-- **Logs**: Stored in `logs/` directory (gitignored)
-- **Backups**: Created by upgrade script in `backups/` (gitignored)
+- **Keys**: Stored in `/solana/wormhole/keys/` directory (gitignored, never committed)
+- **Data**: Stored in `/solana/wormhole/data/` directory (gitignored, guardian database)
+- **Logs**: Stored in `/solana/wormhole/logs/` directory (gitignored)
+- **Backups**: Created by upgrade script in `/solana/wormhole/backups/` (gitignored)
+- **Contracts**: Solana contract artifacts stored in `/solana/wormhole/contracts/solana/` (gitignored)
 - **Contracts**: Pre-compiled contract binaries and ABIs included
 - **Pure Bash**: All scripts use bash/Go (no Node.js dependencies)
 
