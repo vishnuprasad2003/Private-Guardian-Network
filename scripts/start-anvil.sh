@@ -1,28 +1,44 @@
 #!/bin/bash
-# Start Anvil (local Ethereum node for guardian registry)
-# Usage: ./scripts/start-anvil.sh
-
+# ─────────────────────────────────────────────────────────────────────────────
+# Start Anvil — local-only private EVM node (no mainnet forking)
+# State is persisted to BASE_DIR/data/anvil-state.json
+# Usage: ./scripts/start-anvil.sh [config-file]
+# ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
 
-[[ -f "${WORKSPACE_ROOT}/configs/guardian-0.conf" ]] && source "${WORKSPACE_ROOT}/configs/guardian-0.conf"
+CONFIG="${1:-${WORKSPACE_ROOT}/configs/guardian-0.conf}"
+load_config "$CONFIG"
+ensure_dirs
 
 PORT="${ANVIL_PORT:-8545}"
 HOST="${ANVIL_HOST:-0.0.0.0}"
 CHAIN_ID="${ANVIL_CHAIN_ID:-31337}"
-PID_FILE="/solana/wormhole/anvil.pid"
-LOG_FILE="/solana/wormhole/logs/anvil.log"
-STATE_FILE="/solana/wormhole/data/anvil-state.json"
+PID_FILE="${BASE_DIR}/pids/anvil.pid"
+LOG_FILE="${BASE_DIR}/logs/anvil.log"
+STATE_FILE="${BASE_DIR}/data/anvil-state.json"
 
-command_exists anvil || { log_error "Anvil not installed. Install: curl -L https://foundry.paradigm.xyz | bash && foundryup"; exit 1; }
-is_running "$PID_FILE" && { log_warn "Already running"; exit 1; }
+command_exists anvil || { log_error "Anvil not found. Run: make install-deps"; exit 1; }
+is_running "$PID_FILE" && { log_warn "Anvil already running"; exit 1; }
 
-mkdir -p "$(dirname "$LOG_FILE")" "$(dirname "$STATE_FILE")"
+export FOUNDRY_CACHE_DIR="${BASE_DIR}/.foundry/cache"
+export FOUNDRY_DATA_DIR="${BASE_DIR}/.foundry/data"
 
-nohup anvil --host "$HOST" --port "$PORT" --chain-id "$CHAIN_ID" \
-    --accounts 10 --balance 10000 --block-time 1 \
-    --state "$STATE_FILE" --state-interval 60 >> "$LOG_FILE" 2>&1 &
+log_info "Starting Anvil (local-only, no forking)"
+log_info "State: ${STATE_FILE}"
+
+nohup env FOUNDRY_CACHE_DIR="$FOUNDRY_CACHE_DIR" \
+          FOUNDRY_DATA_DIR="$FOUNDRY_DATA_DIR" \
+    anvil --host "$HOST" --port "$PORT" --chain-id "$CHAIN_ID" \
+          --accounts 10 --balance 10000 --block-time 1 \
+          --state "$STATE_FILE" --state-interval 60 \
+          >> "$LOG_FILE" 2>&1 &
 echo "$!" > "$PID_FILE"
 sleep 2
 
-kill -0 "$(cat "$PID_FILE")" 2>/dev/null && log_success "Anvil started on $HOST:$PORT" || { log_error "Failed"; exit 1; }
+if kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+    log_success "Anvil running on ${HOST}:${PORT}"
+else
+    log_error "Anvil failed to start — check ${LOG_FILE}"
+    exit 1
+fi
