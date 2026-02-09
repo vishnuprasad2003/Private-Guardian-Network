@@ -9,8 +9,12 @@ source "$(dirname "$0")/common.sh"
 CHAIN="${1:?Usage: $0 <anvil|avalanche> [config-file]}"
 CONFIG="${2:-${WORKSPACE_ROOT}/configs/guardian-0.conf}"
 load_config "$CONFIG"
+ensure_dirs
 
-CONTRACTS="${WORKSPACE_ROOT}/contracts/evm"
+# Use contracts from BASE_DIR (copied there by ensure_dirs / make init)
+CONTRACTS="${BASE_DIR}/contracts/evm"
+[[ ! -d "$CONTRACTS" ]] || [[ -z "$(ls -A "$CONTRACTS" 2>/dev/null)" ]] && \
+    CONTRACTS="${WORKSPACE_ROOT}/contracts/evm"
 command_exists cast || { log_error "cast not found. Run: make install-deps"; exit 1; }
 
 case "$CHAIN" in

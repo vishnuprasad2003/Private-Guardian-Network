@@ -37,12 +37,25 @@ load_config() {
     return 0
 }
 
-# Create every directory referenced in the config.
+# Create every directory referenced in the config and copy contracts if needed.
 ensure_dirs() {
     local base="${BASE_DIR:?BASE_DIR not set}"
     mkdir -p "${base}/data" "${base}/logs" "${base}/keys" \
              "${base}/pids" "${base}/sockets" "${base}/backups" \
-             "${base}/contracts/solana" "${base}/.foundry/cache" "${base}/.foundry/data"
+             "${base}/contracts/evm" "${base}/contracts/solana" \
+             "${base}/.foundry/cache" "${base}/.foundry/data"
+
+    # Auto-copy contract artifacts from workspace to BASE_DIR if not already there
+    local ws_evm="${WORKSPACE_ROOT}/contracts/evm"
+    local ws_sol="${WORKSPACE_ROOT}/contracts/solana"
+    if [[ -d "$ws_evm" ]] && [[ -z "$(ls -A "${base}/contracts/evm" 2>/dev/null)" ]]; then
+        cp "$ws_evm"/* "${base}/contracts/evm/" 2>/dev/null && \
+            log_info "Copied EVM contracts → ${base}/contracts/evm/" || true
+    fi
+    if [[ -d "$ws_sol" ]] && [[ ! -f "${base}/contracts/solana/bridge.so" ]]; then
+        cp "$ws_sol"/* "${base}/contracts/solana/" 2>/dev/null && \
+            log_info "Copied Solana contracts → ${base}/contracts/solana/" || true
+    fi
 }
 
 # ─── Process management ────────────────────────────────────────────────────
