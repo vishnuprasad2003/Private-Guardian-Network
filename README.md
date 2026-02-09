@@ -378,6 +378,57 @@ All runtime data is stored under `BASE_DIR` (`/solana/wormhole`):
 
 ---
 
+## Systemd Services (Auto-Restart)
+
+For production, use systemd to auto-restart services on failure or reboot.
+
+### Install Services
+
+```bash
+# Copy service files
+sudo cp systemd/anvil.service /etc/systemd/system/
+sudo cp systemd/guardian@.service /etc/systemd/system/
+
+# Reload systemd
+sudo systemctl daemon-reload
+
+# Enable and start Anvil
+sudo systemctl enable anvil.service
+sudo systemctl start anvil.service
+
+# Enable and start guardians
+sudo systemctl enable guardian@guardian-0.service
+sudo systemctl start guardian@guardian-0.service
+
+sudo systemctl enable guardian@guardian-1.service
+sudo systemctl start guardian@guardian-1.service
+
+sudo systemctl enable guardian@guardian-2.service
+sudo systemctl start guardian@guardian-2.service
+```
+
+### Manage Services
+
+```bash
+# Check status
+sudo systemctl status guardian@guardian-0.service
+sudo systemctl status anvil.service
+
+# View logs
+sudo journalctl -u guardian@guardian-0.service -f
+sudo journalctl -u anvil.service -f
+
+# Restart
+sudo systemctl restart guardian@guardian-0.service
+
+# Stop
+sudo systemctl stop guardian@guardian-0.service
+```
+
+> **Note:** When using systemd, do not use `make start-*` / `make stop-*` — use `systemctl` commands instead. The hostname must already be set correctly before the service starts.
+
+---
+
 ## Upgrading
 
 ```bash

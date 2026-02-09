@@ -1,0 +1,35 @@
+[Unit]
+Description=Wormhole Guardian Node (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=azureuser
+WorkingDirectory=/home/azureuser/Private-Guardian-Network
+Environment="PATH=/solana/wormhole/.foundry/bin:/home/azureuser/.local/share/solana/install/active_release/bin:/home/azureuser/go/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="LD_LIBRARY_PATH=/usr/local/lib:/home/azureuser/.local/lib"
+Environment="FOUNDRY_CACHE_DIR=/solana/wormhole/.foundry/cache"
+Environment="FOUNDRY_DATA_DIR=/solana/wormhole/.foundry/data"
+ExecStart=/bin/bash -c 'cd /home/azureuser/Private-Guardian-Network && ./scripts/start-guardian.sh configs/%i.conf'
+ExecStop=/bin/bash -c 'cd /home/azureuser/Private-Guardian-Network && ./scripts/stop-guardian.sh configs/%i.conf'
+Restart=on-failure
+RestartSec=15
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=guardian-%i
+
+# Resource limits
+LimitNOFILE=65535
+LimitMEMLOCK=infinity
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

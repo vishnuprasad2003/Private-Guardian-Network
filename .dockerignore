@@ -1,0 +1,16 @@
+.git
+.gitignore
+.dockerignore
+.vscode
+.idea
+*.md
+data/
+logs/
+keys/
+pids/
+sockets/
+backups/
+.foundry/
+systemd/
+*.pid
+*.swp

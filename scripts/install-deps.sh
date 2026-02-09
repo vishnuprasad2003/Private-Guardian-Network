@@ -13,6 +13,17 @@ log_error()   { echo -e "${RED}[ERROR]${NC} $*"; }
 
 COMPONENT="${1:-all}"
 
+# ─── System packages (jq, curl, etc.) ──────────────────────────────────────
+install_system_deps() {
+    log_info "Installing system dependencies (jq, curl)..."
+    if command -v apt-get &>/dev/null; then
+        sudo apt-get update -qq && sudo apt-get install -y -qq jq curl wget || true
+    elif command -v yum &>/dev/null; then
+        sudo yum install -y jq curl wget || true
+    fi
+    command -v jq &>/dev/null && log_success "jq installed" || log_warn "jq not found — install manually"
+}
+
 # ─── Foundry (anvil, cast, forge) ──────────────────────────────────────────
 install_foundry() {
     log_info "Installing Foundry..."
@@ -88,6 +99,7 @@ install_solana() {
 # ─── Main ──────────────────────────────────────────────────────────────────
 case "$COMPONENT" in
     all)
+        install_system_deps
         install_foundry
         install_wasmvm
         install_grpcurl

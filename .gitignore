@@ -1,27 +1,30 @@
-# Runtime data (stored in /solana/wormhole)
-/solana/wormhole/
+# Runtime data (stored under BASE_DIR, default /solana/wormhole)
 data/
 logs/
 keys/
+pids/
+sockets/
+backups/
 *.pid
 
 # Deployment artifacts
 contracts/solana/program-id.json
 contracts/solana/program-keypair.json
 
-# Build
+# Build artefacts
 build/
 node_modules/
 
-# Backups (from upgrade script)
-backups/
-/solana/wormhole/backups/
+# Foundry cache (stored under BASE_DIR/.foundry)
+.foundry/
 
 # OS
 .DS_Store
-*.swp
-*.swo
+Thumbs.db
 
-# IDE
+# Editors
 .idea/
 .vscode/
+*.swp
+*.swo
+*~

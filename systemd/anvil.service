@@ -1,0 +1,28 @@
+[Unit]
+Description=Anvil Local EVM Node (Guardian Registry)
+After=network-online.target
+Wants=network-online.target
+Before=guardian@guardian-0.service
+
+[Service]
+Type=simple
+User=azureuser
+WorkingDirectory=/home/azureuser/Private-Guardian-Network
+Environment="PATH=/solana/wormhole/.foundry/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="FOUNDRY_CACHE_DIR=/solana/wormhole/.foundry/cache"
+Environment="FOUNDRY_DATA_DIR=/solana/wormhole/.foundry/data"
+ExecStart=/bin/bash -c 'cd /home/azureuser/Private-Guardian-Network && ./scripts/start-anvil.sh'
+ExecStop=/bin/bash -c 'cd /home/azureuser/Private-Guardian-Network && ./scripts/stop-anvil.sh'
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=anvil
+
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
