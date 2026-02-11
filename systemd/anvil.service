@@ -1,5 +1,6 @@
 [Unit]
-Description=Anvil Local EVM Node (Guardian Registry)
+Description=Anvil Local EVM Node (Guardian Registry Storage)
+Documentation=https://github.com/foundry-rs/foundry
 After=network-online.target
 Wants=network-online.target
 Before=guardian@guardian-0.service
@@ -7,22 +8,29 @@ Before=guardian@guardian-0.service
 [Service]
 Type=simple
 User=azureuser
+Group=azureuser
 WorkingDirectory=/home/azureuser/Private-Guardian-Network
+Environment="WORKSPACE_ROOT=/home/azureuser/Private-Guardian-Network"
 Environment="PATH=/solana/wormhole/.foundry/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="FOUNDRY_CACHE_DIR=/solana/wormhole/.foundry/cache"
 Environment="FOUNDRY_DATA_DIR=/solana/wormhole/.foundry/data"
-ExecStart=/bin/bash -c 'cd /home/azureuser/Private-Guardian-Network && ./scripts/start-anvil.sh'
+ExecStart=/bin/bash -c 'source /home/azureuser/.bashrc && cd /home/azureuser/Private-Guardian-Network && ./scripts/start-anvil.sh'
 ExecStop=/bin/bash -c 'cd /home/azureuser/Private-Guardian-Network && ./scripts/stop-anvil.sh'
 Restart=on-failure
 RestartSec=10
 StartLimitIntervalSec=300
 StartLimitBurst=5
 
+# Logging: Both journald and file (file for persistence, journald for systemd integration)
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=anvil
 
+# Resource limits
 LimitNOFILE=65535
+LimitNPROC=32768
+MemoryAccounting=true
+CPUAccounting=true
 
 [Install]
 WantedBy=multi-user.target

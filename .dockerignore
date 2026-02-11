@@ -1,16 +1,53 @@
+# Git
 .git
 .gitignore
 .dockerignore
-.vscode
-.idea
+
+# Documentation
 *.md
+docs/
+
+# Runtime data (all configurable via BASE_DIR in configs)
 data/
 logs/
 keys/
 pids/
 sockets/
 backups/
-.foundry/
-systemd/
 *.pid
+*.log
+*.log.*
+*.log.gz
+
+# Foundry
+.foundry/
+.foundryup
+~/.foundry/
+
+# Systemd (not needed in container)
+systemd/
+
+# Build artifacts
+build/
+target/
+node_modules/
+
+# Editors
+.vscode
+.idea
 *.swp
+*.swo
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
+*.backup
+
+# Test files
+test/
+tests/
+*_test.go
+*_test.sh

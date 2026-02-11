@@ -363,18 +363,172 @@ Maintenance:
 
 ## Storage & Disk Usage
 
-All runtime data is stored under `BASE_DIR` (`/solana/wormhole`):
+### Overview
+
+**All runtime data is stored under `BASE_DIR`** (default: `/solana/wormhole`). Change `BASE_DIR` in config files to relocate everything. **Nothing grows in the OS home directory** after proper setup.
+
+### What Gets Stored
+
+#### 1. **Anvil (Guardian Registry Storage Only)**
+
+**Purpose:** Anvil is **ONLY** used to store:
+- Guardian registry contract (guardian addresses)
+- Bridge contract addresses (EVM, Avalanche, Solana)
+- RPC endpoint configuration
+
+**No transactions are made through Anvil** after initial contract deployment. Guardian nodes only read from Anvil to get registry information.
+
+| Location | Contents | Expected Size | Growth Rate |
+|----------|----------|---------------|-------------|
+| `data/anvil-state.json` | Contract state (registry + addresses) | **10-50 KB** | **Static** (only changes on redeployment) |
+| `.foundry/anvil/tmp/` | Temporary state snapshots | **<1 MB** | **Minimal** (only during deployment) |
+
+**Optimizations:**
+- `ANVIL_BLOCK_TIME=0`: On-demand mining (blocks only created during deployment)
+- `ANVIL_STATE_INTERVAL=0`: State saved only on shutdown (no periodic saves)
+- Symlink `~/.foundry → /solana/wormhole/.foundry`: Redirects all temp files
+
+**Expected total Anvil storage: <100 KB** (after deployment, no growth)
+
+#### 2. **Guardian Nodes (VAA Storage)**
+
+**Purpose:** Guardian nodes store signed VAAs (Verified Action Approvals) in BadgerDB.
+
+| Location | Contents | Expected Size | Growth Rate |
+|----------|----------|---------------|-------------|
+| `data/guardian-N/db/` | BadgerDB database (signed VAAs) | **1-10 MB per 1000 VAAs** | **~1-5 KB per VAA** |
+| `data/guardian-N/` | Other guardian state | **<1 MB** | **Minimal** |
+
+**VAA Size:** Each VAA is typically **1-5 KB** (depends on payload size).
+
+**Growth Calculation:**
+- **Low activity:** 10 VAAs/day = ~50 KB/day = **~18 MB/year**
+- **Medium activity:** 100 VAAs/day = ~500 KB/day = **~180 MB/year**
+- **High activity:** 1000 VAAs/day = ~5 MB/day = **~1.8 GB/year**
+
+**VAA Purge:** Configure `VAA_PURGE_ENABLED=true` and `VAA_PURGE_RETENTION_DAYS=30` in config to auto-delete old VAAs.
+
+#### 3. **Logs**
+
+| Location | Contents | Expected Size | Growth Rate |
+|----------|----------|---------------|-------------|
+| `logs/guardian-N.log` | Guardian node logs | **100 MB per file** | **~10-50 MB/day** (depends on log level) |
+| `logs/anvil.log` | Anvil logs | **<10 MB** | **Minimal** |
+
+**Log Rotation:** Configured via `LOG_MAX_SIZE` (default: 100M) and `LOG_MAX_FILES` (default: 5) in config files. Logrotate also runs daily (keeps 7 days).
+
+**Expected total log storage: 500-700 MB** (with rotation)
+
+#### 4. **Other Storage**
 
 | Location | Contents | Expected Size |
 |----------|----------|---------------|
-| `data/guardian-N/` | SQLite databases | Few MB each |
-| `data/anvil-state.json` | Local transactions only | KB–MB |
-| `logs/` | Guardian + Anvil logs | Grows over time |
-| `keys/` | Auto-generated in devMode | <1 KB each |
-| `.foundry/cache/` | Foundry cache | Small |
-| `backups/` | Upgrade backups (last 5 kept) | ~50 MB each |
+| `keys/` | Guardian keys, node keys | **<10 KB total** |
+| `pids/` | Process ID files | **<1 KB** |
+| `sockets/` | Unix domain sockets | **0 bytes** (in-memory) |
+| `backups/` | Upgrade backups | **~50 MB each** (last 5 kept) |
+| `.foundry/cache/` | Foundry compilation cache | **<10 MB** |
+| `.foundry/data/` | Foundry data | **<1 MB** |
+| `contracts/evm/` | Contract bytecode | **<1 MB** |
+| `contracts/solana/` | Solana programs | **<2 MB** |
 
-**Nothing in the OS home directory grows.** Foundry environment variables (`FOUNDRY_CACHE_DIR`, `FOUNDRY_DATA_DIR`) are set by `scripts/common.sh` and `~/.bashrc`.
+### Total Storage Estimate
+
+**Minimal setup (no VAA activity):**
+- Anvil: 100 KB
+- Guardian nodes (3x): 3 MB (empty databases)
+- Logs (rotated): 500 MB
+- Other: 10 MB
+- **Total: ~500 MB**
+
+**Production setup (100 VAAs/day, 1 year):**
+- Anvil: 100 KB
+- Guardian nodes (3x): 3 × 180 MB = 540 MB
+- Logs (rotated): 500 MB
+- Other: 10 MB
+- **Total: ~1 GB**
+
+**High activity (1000 VAAs/day, 1 year):**
+- Anvil: 100 KB
+- Guardian nodes (3x): 3 × 1.8 GB = 5.4 GB
+- Logs (rotated): 500 MB
+- Other: 10 MB
+- **Total: ~6 GB**
+
+### Configurable Storage Paths
+
+All storage paths are configurable in `configs/guardian-N.conf`:
+
+```bash
+BASE_DIR="/solana/wormhole"                    # Base directory (change this to relocate everything)
+
+# Anvil storage
+ANVIL_STATE_FILE="${BASE_DIR}/data/anvil-state.json"
+ANVIL_LOG_FILE="${BASE_DIR}/logs/anvil.log"
+ANVIL_PID_FILE="${BASE_DIR}/pids/anvil.pid"
+
+# Guardian storage
+DATA_DIR="${BASE_DIR}/data/${GUARDIAN_NAME}"   # BadgerDB location
+LOG_FILE="${BASE_DIR}/logs/${GUARDIAN_NAME}.log"
+PID_FILE="${BASE_DIR}/pids/${GUARDIAN_NAME}.pid"
+KEY_FILE="${BASE_DIR}/keys/${GUARDIAN_NAME}.key"
+
+# Log rotation
+LOG_MAX_SIZE="100M"                            # Rotate at 100MB
+LOG_MAX_FILES=5                                # Keep 5 rotated files
+LOG_COMPRESS=true                               # Compress old logs
+
+# VAA database
+VAA_DB_DIR="${DATA_DIR}/db"                    # BadgerDB location
+VAA_PURGE_ENABLED=false                        # Auto-purge old VAAs
+VAA_PURGE_RETENTION_DAYS=30                    # Keep VAAs for 30 days
+
+# Foundry (redirected via symlink)
+FOUNDRY_CACHE_DIR="${BASE_DIR}/.foundry/cache"
+FOUNDRY_DATA_DIR="${BASE_DIR}/.foundry/data"
+```
+
+### Preventing Home Directory Growth
+
+**Problem:** Anvil creates temporary files in `~/.foundry/anvil/tmp/` by default.
+
+**Solution:** The `start-anvil.sh` script automatically creates a symlink `~/.foundry → /solana/wormhole/.foundry` to redirect all writes.
+
+**If you see `~/.foundry` growing large:**
+```bash
+make stop-anvil
+make clean-foundry    # Migrates existing data and creates symlink
+make start-anvil
+```
+
+### Log Rotation
+
+**Automatic log rotation** is configured in two ways:
+
+1. **Script-level:** `start-guardian.sh` rotates logs when they exceed `LOG_MAX_SIZE`
+2. **System-level:** `systemd/logrotate.conf` runs daily (keeps 7 days, compresses)
+
+**Install logrotate:**
+```bash
+sudo cp systemd/logrotate.conf /etc/logrotate.d/wormhole-guardian
+sudo systemctl restart logrotate
+```
+
+### Monitoring Storage
+
+```bash
+# Check total storage
+du -sh /solana/wormhole
+
+# Check breakdown
+du -h --max-depth=1 /solana/wormhole | sort -hr
+
+# Check VAA database size
+du -sh /solana/wormhole/data/guardian-*/db
+
+# Check log sizes
+du -sh /solana/wormhole/logs/*
+```
 
 ---
 
@@ -388,6 +542,9 @@ For production, use systemd to auto-restart services on failure or reboot.
 # Copy service files
 sudo cp systemd/anvil.service /etc/systemd/system/
 sudo cp systemd/guardian@.service /etc/systemd/system/
+
+# Install log rotation (optional but recommended)
+sudo cp systemd/logrotate.conf /etc/logrotate.d/wormhole-guardian
 
 # Reload systemd
 sudo systemctl daemon-reload
@@ -447,5 +604,5 @@ make upgrade                # backup → stop → pull → build → verify
 | `Hostname must be guardian-N` | `sudo hostname guardian-N` before starting |
 | Guardian fails to start | `make logs-N` to check errors |
 | Anvil not found | `./scripts/install-deps.sh foundry` and `source ~/.bashrc` |
-| `~/.foundry` growing large | `rm -rf ~/.foundry/anvil` and verify `source ~/.bashrc` has Foundry env vars |
+| `~/.foundry` growing large (39GB+) | **Anvil creates temp files in `~/.foundry/anvil/tmp/`**<br>Run: `make clean-foundry` to migrate to `/solana/wormhole/.foundry`<br>The `start-anvil.sh` script now auto-creates a symlink, but if you have an existing large directory, run `make clean-foundry` first. |
 | grpcurl: `unknown service` | Use proto files: `-import-path ../wormhole/proto -proto publicrpc/v1/publicrpc.proto` |

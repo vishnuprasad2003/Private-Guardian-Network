@@ -1,31 +1,39 @@
 [Unit]
 Description=Wormhole Guardian Node (%i)
-After=network-online.target
+Documentation=https://github.com/wormhole-foundation/wormhole
+After=network-online.target anvil.service
 Wants=network-online.target
+Requires=anvil.service
 
 [Service]
 Type=simple
 User=azureuser
+Group=azureuser
 WorkingDirectory=/home/azureuser/Private-Guardian-Network
+Environment="WORKSPACE_ROOT=/home/azureuser/Private-Guardian-Network"
 Environment="PATH=/solana/wormhole/.foundry/bin:/home/azureuser/.local/share/solana/install/active_release/bin:/home/azureuser/go/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="LD_LIBRARY_PATH=/usr/local/lib:/home/azureuser/.local/lib"
 Environment="FOUNDRY_CACHE_DIR=/solana/wormhole/.foundry/cache"
 Environment="FOUNDRY_DATA_DIR=/solana/wormhole/.foundry/data"
-ExecStart=/bin/bash -c 'cd /home/azureuser/Private-Guardian-Network && ./scripts/start-guardian.sh configs/%i.conf'
+ExecStart=/bin/bash -c 'source /home/azureuser/.bashrc && cd /home/azureuser/Private-Guardian-Network && ./scripts/start-guardian.sh configs/%i.conf'
 ExecStop=/bin/bash -c 'cd /home/azureuser/Private-Guardian-Network && ./scripts/stop-guardian.sh configs/%i.conf'
 Restart=on-failure
 RestartSec=15
 StartLimitIntervalSec=300
 StartLimitBurst=5
 
-# Logging
+# Logging: Both journald and file (file for persistence, journald for systemd integration)
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=guardian-%i
 
-# Resource limits
+# Resource limits (production-grade)
 LimitNOFILE=65535
+LimitNPROC=32768
 LimitMEMLOCK=infinity
+MemoryAccounting=true
+CPUAccounting=true
+IOAccounting=true
 
 # Security
 NoNewPrivileges=true

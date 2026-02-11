@@ -47,6 +47,8 @@ help:
 	@echo "    make upgrade-check        Check for updates"
 	@echo "    make backup               Create a backup"
 	@echo "    make clean                Remove data, logs, keys, pids"
+	@echo "    make clean-foundry        Migrate ~/.foundry to /solana/wormhole/.foundry"
+	@echo "    make install-systemd      Install systemd services + logrotate"
 	@echo ""
 
 # ─── Setup ──────────────────────────────────────────────────────────────────
@@ -156,3 +158,38 @@ clean:
 	@rm -rf /solana/wormhole/logs/* /solana/wormhole/keys/* \
 	        /solana/wormhole/pids/* /solana/wormhole/sockets/* 2>/dev/null || true
 	@echo "Done"
+
+clean-foundry:
+	@echo "Cleaning old ~/.foundry directory (migrates to /solana/wormhole/.foundry)..."
+	@bash -c ' \
+		if [[ -d "$$HOME/.foundry" && ! -L "$$HOME/.foundry" ]]; then \
+			echo "Stopping Anvil if running..."; \
+			./scripts/stop-anvil.sh 2>/dev/null || true; \
+			sleep 2; \
+			echo "Removing large anvil temp files..."; \
+			rm -rf "$$HOME/.foundry/anvil" 2>/dev/null || true; \
+			echo "Preserving bin/versions (if any)..."; \
+			mkdir -p /solana/wormhole/.foundry/bin /solana/wormhole/.foundry/versions; \
+			[[ -d "$$HOME/.foundry/bin" ]] && cp -r "$$HOME/.foundry/bin"/* /solana/wormhole/.foundry/bin/ 2>/dev/null || true; \
+			[[ -d "$$HOME/.foundry/versions" ]] && cp -r "$$HOME/.foundry/versions"/* /solana/wormhole/.foundry/versions/ 2>/dev/null || true; \
+			echo "Removing old ~/.foundry directory..."; \
+			rm -rf "$$HOME/.foundry" 2>/dev/null || true; \
+			echo "Creating symlink ~/.foundry → /solana/wormhole/.foundry"; \
+			ln -sf /solana/wormhole/.foundry "$$HOME/.foundry"; \
+			echo "Done. Space freed in home directory."; \
+		elif [[ -L "$$HOME/.foundry" ]]; then \
+			echo "~/.foundry is already a symlink: $$(readlink "$$HOME/.foundry")"; \
+		else \
+			echo "~/.foundry does not exist. Creating symlink..."; \
+			mkdir -p /solana/wormhole/.foundry; \
+			ln -sf /solana/wormhole/.foundry "$$HOME/.foundry"; \
+			echo "Done."; \
+		fi'
+
+install-systemd:
+	@echo "Installing systemd services and logrotate..."
+	@sudo cp systemd/anvil.service /etc/systemd/system/ && \
+	 sudo cp systemd/guardian@.service /etc/systemd/system/ && \
+	 sudo cp systemd/logrotate.conf /etc/logrotate.d/wormhole-guardian && \
+	 sudo systemctl daemon-reload && \
+	 echo "Done. Services installed. Use 'systemctl enable/start' to activate."

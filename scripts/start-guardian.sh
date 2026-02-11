@@ -31,6 +31,24 @@ fi
 rm -f "$KEY_FILE" "$NODE_KEY_FILE" "$ADMIN_SOCKET" "$GRPC_SOCKET" 2>/dev/null || true
 mkdir -p "$DATA_DIR"
 
+# ── Log rotation (if log file exists and is large) ──────────────────────────
+LOG_MAX_SIZE="${LOG_MAX_SIZE:-100M}"
+if [[ -f "$LOG_FILE" ]]; then
+    # Check if log file exceeds max size (convert to bytes for comparison)
+    if command_exists stat; then
+        LOG_SIZE=$(stat -f%z "$LOG_FILE" 2>/dev/null || stat -c%s "$LOG_FILE" 2>/dev/null || echo "0")
+        MAX_BYTES=$(echo "$LOG_MAX_SIZE" | sed 's/M$/*1024*1024/;s/K$/*1024/' | bc 2>/dev/null || echo "104857600")
+        if [[ "$LOG_SIZE" -gt "$MAX_BYTES" ]]; then
+            log_info "Rotating log file (size: ${LOG_SIZE} bytes)"
+            LOG_BACKUP="${LOG_FILE}.$(date +%Y%m%d_%H%M%S)"
+            mv "$LOG_FILE" "$LOG_BACKUP"
+            [[ "${LOG_COMPRESS:-false}" == "true" ]] && gzip "$LOG_BACKUP" 2>/dev/null || true
+            # Keep only last N files
+            ls -t "${LOG_FILE}".* 2>/dev/null | tail -n +$((LOG_MAX_FILES + 1)) | xargs rm -f 2>/dev/null || true
+        fi
+    fi
+fi
+
 # In unsafeDevMode, delete old key so guardiand regenerates deterministically
 if [[ "${UNSAFE_DEV_MODE:-false}" == "true" ]]; then
     rm -f "$KEY_FILE"

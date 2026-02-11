@@ -1,4 +1,5 @@
 # Runtime data (stored under BASE_DIR, default /solana/wormhole)
+# All paths are configurable in configs/guardian-N.conf
 data/
 logs/
 keys/
@@ -6,25 +7,39 @@ pids/
 sockets/
 backups/
 *.pid
+*.log.*
+*.log.gz
 
 # Deployment artifacts
 contracts/solana/program-id.json
 contracts/solana/program-keypair.json
+contracts/evm/*.bytecode
 
 # Build artefacts
 build/
 node_modules/
+target/
 
-# Foundry cache (stored under BASE_DIR/.foundry)
+# Foundry cache/data (stored under BASE_DIR/.foundry, redirected via symlink)
 .foundry/
+.foundryup
+
+# Anvil temporary files (redirected to BASE_DIR/.foundry)
+~/.foundry/
 
 # OS
 .DS_Store
 Thumbs.db
+*.swp
+*.swo
+*~
 
 # Editors
 .idea/
 .vscode/
-*.swp
-*.swo
-*~
+*.code-workspace
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
