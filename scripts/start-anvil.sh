@@ -76,12 +76,13 @@ log_info "Block time: ${BLOCK_TIME}s (0 = on-demand, only mine when transactions
 # Build Anvil command
 ANVIL_CMD="anvil --host $HOST --port $PORT --chain-id $CHAIN_ID --accounts 10 --balance 10000"
 
-# Add block-time flag (0 = on-demand mining)
+# Add block-time flag (0 = on-demand mining - omit flag to enable on-demand)
 if [[ "$BLOCK_TIME" == "0" ]]; then
-    ANVIL_CMD="$ANVIL_CMD --block-time 0"
-    log_info "On-demand mining enabled (blocks only created during contract deployment)"
+    # Don't add --block-time flag - Anvil will mine on-demand (only when transactions arrive)
+    log_info "On-demand mining enabled (blocks only created when transactions arrive)"
 else
     ANVIL_CMD="$ANVIL_CMD --block-time $BLOCK_TIME"
+    log_info "Block time: ${BLOCK_TIME}s (blocks created every ${BLOCK_TIME} seconds)"
 fi
 
 # Add state persistence (0 = only save on shutdown, optimal for no-transaction use case)
