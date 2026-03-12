@@ -73,6 +73,7 @@ ARGS=(
 # Chain connections (EVM = WS for subscriptions; Solana = HTTP polling)
 [[ -n "${GETH_RPC:-}" ]]      && ARGS+=(--ethRPC "$GETH_RPC" --ethContract "$GETH_CONTRACT")
 [[ -n "${AVALANCHE_RPC:-}" ]] && ARGS+=(--avalancheRPC "$AVALANCHE_RPC" --avalancheContract "$AVALANCHE_CONTRACT")
+[[ -n "${BSC_RPC:-}" ]]       && ARGS+=(--bscRPC "$BSC_RPC" --bscContract "$BSC_CONTRACT")
 [[ -n "${SOLANA_RPC:-}" && -n "${SOLANA_CONTRACT:-}" ]] && ARGS+=(--solanaRPC "$SOLANA_RPC" --solanaContract "$SOLANA_CONTRACT")
 [[ -n "${BOOTSTRAP_PEERS:-}" ]]                && ARGS+=(--bootstrap "$BOOTSTRAP_PEERS")
 [[ "${DISABLE_TELEMETRY:-false}" == "true" ]]  && ARGS+=(--disableTelemetry)
