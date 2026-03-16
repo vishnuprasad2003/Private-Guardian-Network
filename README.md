@@ -244,6 +244,29 @@ sudo hostname guardian-0
 make start-all
 ```
 
+Or
+```bash
+cd "/home/vishnu-intain/Documents/Block Chain/Cross Chain/Private-Guardian-Network"
+
+# Start guardian-0 (bootstrap node)
+sudo hostnamectl set-hostname guardian-0
+make start-0
+
+# Wait ~5 seconds, then start guardian-1
+sudo hostnamectl set-hostname guardian-1
+make start-1
+
+# Wait ~5 seconds, then start guardian-2
+sudo hostnamectl set-hostname guardian-2
+make start-2
+
+# Restore your hostname
+sudo hostnamectl set-hostname vishnu-prasad-intain
+
+# Verify all running
+make status
+```
+
 ### Step 9 — Verify
 
 ```bash
