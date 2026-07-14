@@ -1,45 +1,40 @@
-# Runtime data (stored under BASE_DIR, default /solana/wormhole)
-# All paths are configurable in configs/guardian-N.conf
-data/
-logs/
-keys/
-pids/
-sockets/
-backups/
-*.pid
-*.log.*
-*.log.gz
 
-# Deployment artifacts
+*~
+# All paths are configurable in configs/guardian-N.conf
+# Anvil temporary files (redirected to BASE_DIR/.foundry)
+*.backup
+backups/
+*.bak
+build/
+# Build artefacts
+*.code-workspace
+contracts/evm/*.bytecode
 contracts/solana/program-id.json
 contracts/solana/program-keypair.json
-contracts/evm/*.bytecode
-
-# Build artefacts
-build/
-node_modules/
-target/
-
-# Foundry cache/data (stored under BASE_DIR/.foundry, redirected via symlink)
-.foundry/
-.foundryup
-
-# Anvil temporary files (redirected to BASE_DIR/.foundry)
-~/.foundry/
-
-# OS
+data/
+# Deployment artifacts
 .DS_Store
-Thumbs.db
-*.swp
-*.swo
-*~
-
 # Editors
+.foundry/
+~/.foundry/
+# Foundry cache/data (stored under BASE_DIR/.foundry, redirected via symlink)
+.foundryup
 .idea/
-.vscode/
-*.code-workspace
-
+keys/
+*.log.*
+*.log.gz
+logs/
+node_modules/
+# OS
+*.pid
+pids/
+__pycache__/
+# Runtime data (stored under BASE_DIR, default /solana/wormhole)
+sockets/
+*.swo
+*.swp
+target/
 # Temporary files
+Thumbs.db
 *.tmp
-*.bak
-*.backup
+.vscode/
