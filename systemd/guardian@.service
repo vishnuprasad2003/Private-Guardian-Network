@@ -4,25 +4,44 @@ Documentation=https://github.com/wormhole-foundation/wormhole
 After=network-online.target anvil.service
 Wants=network-online.target
 Requires=anvil.service
+PartOf=guardian.target
+# guardian-1/2 bootstrap off guardian-0. Ordering only (Wants, not Requires) so a
+# transient guardian-0 restart does not tear down the peers — they reconnect.
+After=guardian@guardian-0.service
 
 [Service]
 Type=simple
-User=azureuser
-Group=azureuser
-WorkingDirectory=/home/azureuser/Private-Guardian-Network
-Environment="WORKSPACE_ROOT=/home/azureuser/Private-Guardian-Network"
-Environment="PATH=/solana/wormhole/.foundry/bin:/home/azureuser/.local/share/solana/install/active_release/bin:/home/azureuser/go/bin:/usr/local/bin:/usr/bin:/bin"
-Environment="LD_LIBRARY_PATH=/usr/local/lib:/home/azureuser/.local/lib"
+User=__GUARDIAN_USER__
+Group=__GUARDIAN_GROUP__
+WorkingDirectory=__WORKSPACE_ROOT__
+Environment="WORKSPACE_ROOT=__WORKSPACE_ROOT__"
+Environment="PATH=/solana/wormhole/.foundry/bin:__HOME__/.local/share/solana/install/active_release/bin:__HOME__/go/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="LD_LIBRARY_PATH=/usr/local/lib:__HOME__/.local/lib"
 Environment="FOUNDRY_CACHE_DIR=/solana/wormhole/.foundry/cache"
 Environment="FOUNDRY_DATA_DIR=/solana/wormhole/.foundry/data"
-ExecStart=/bin/bash -c 'source /home/azureuser/.bashrc && cd /home/azureuser/Private-Guardian-Network && ./scripts/start-guardian.sh configs/%i.conf'
-ExecStop=/bin/bash -c 'cd /home/azureuser/Private-Guardian-Network && ./scripts/stop-guardian.sh configs/%i.conf'
-Restart=on-failure
+# UTS_MODE=cap  → wrapper runs `unshare --uts` (needs the CAP_SYS_ADMIN granted below).
+# UTS_MODE=userns → no host capability needed (needs unprivileged userns enabled).
+# UTS_MODE=none → host hostname must already be %i (single guardian per host).
+Environment="UTS_MODE=cap"
+
+# Block until Anvil's RPC is live AND the registry contract has bytecode, so the
+# guardian's Ethereum watcher doesn't crash-loop against a not-yet-ready chain.
+ExecStartPre=/bin/bash -lc 'cd "__WORKSPACE_ROOT__" && ./scripts/wait-anvil.sh configs/%i.conf 120'
+
+# UTS-namespaced foreground launch: private hostname=%i, real guardiand PID
+# tracked by systemd. See scripts/systemd-guardian.sh.
+ExecStart=/bin/bash -lc 'cd "__WORKSPACE_ROOT__"; exec ./scripts/systemd-guardian.sh configs/%i.conf'
+
+KillSignal=SIGTERM
+TimeoutStopSec=20
+
+Restart=always
 RestartSec=15
+# Exit status 0 happens when a peer can't bootstrap yet (guardian-0 still starting)
+# and guardiand cancels its root context cleanly — still treat that as restartable.
 StartLimitIntervalSec=300
 StartLimitBurst=5
 
-# Logging: Both journald and file (file for persistence, journald for systemd integration)
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=guardian-%i
@@ -35,7 +54,11 @@ MemoryAccounting=true
 CPUAccounting=true
 IOAccounting=true
 
-# Security
+# Capabilities: CAP_SYS_ADMIN is required to create a UTS namespace and set its
+# hostname (UTS_MODE=cap). Remove this line and switch UTS_MODE=userns to avoid
+# granting it. NoNewPrivileges stays on — ambient caps are granted by systemd.
+AmbientCapabilities=CAP_SYS_ADMIN
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
 PrivateTmp=true
 

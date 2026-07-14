@@ -555,57 +555,54 @@ du -sh /solana/wormhole/logs/*
 
 ---
 
-## Systemd Services (Auto-Restart)
+## Systemd Services (Production Auto-Restart)
 
-For production, use systemd to auto-restart services on failure or reboot.
+Systemd runs Anvil + 3 guardians with crash restart and boot persistence. Units are
+templated (`__GUARDIAN_USER__` / `__WORKSPACE_ROOT__`); `make install-systemd` fills them
+from the installing user and repo path (on the Azure VM: run as `azureuser` from the clone).
 
-### Install Services
+| Concern | Solution |
+| --- | --- |
+| Crash / clean exit | `Restart=always` (covers bootstrap races that exit 0) |
+| Boot | `guardian.target` enabled |
+| PID tracking | `RUN_FOREGROUND=1` → scripts `exec` anvil/guardiand |
+| 3 hostnames on 1 host | `scripts/systemd-guardian.sh` + UTS namespace (`UTS_MODE=cap`) |
+| Anvil not ready | `ExecStartPre=wait-anvil.sh` (RPC up **and** `GETH_CONTRACT` has bytecode) |
+| Registry persistence | `anvil-state.json` loaded on start; saved on graceful stop (`ANVIL_STATE_INTERVAL=0`) |
+
+**Do not re-run `make deploy-anvil` on the VM** if `GETH_CONTRACT` already matches live Anvil state.
+Redeploying creates a new address and would break guardians / settlement VAA observation for that registry.
+
+### Fresh host (first time only)
 
 ```bash
-# Copy service files
-sudo cp systemd/anvil.service /etc/systemd/system/
-sudo cp systemd/guardian@.service /etc/systemd/system/
-
-# Install log rotation (optional but recommended)
-sudo cp systemd/logrotate.conf /etc/logrotate.d/wormhole-guardian
-
-# Reload systemd
-sudo systemctl daemon-reload
-
-# Enable and start Anvil
-sudo systemctl enable anvil.service
+make install-systemd && make enable-systemd
 sudo systemctl start anvil.service
-
-# Enable and start guardians
-sudo systemctl enable guardian@guardian-0.service
-sudo systemctl start guardian@guardian-0.service
-
-sudo systemctl enable guardian@guardian-1.service
-sudo systemctl start guardian@guardian-1.service
-
-sudo systemctl enable guardian@guardian-2.service
-sudo systemctl start guardian@guardian-2.service
+make deploy-anvil                    # once — then paste printed address into configs if new
+sudo systemctl restart anvil.service # flush registry into anvil-state.json
+make network-up
 ```
 
-### Manage Services
+### Existing VM (registry already in anvil-state.json — production path)
 
 ```bash
-# Check status
-sudo systemctl status guardian@guardian-0.service
-sudo systemctl status anvil.service
-
-# View logs
-sudo journalctl -u guardian@guardian-0.service -f
-sudo journalctl -u anvil.service -f
-
-# Restart
-sudo systemctl restart guardian@guardian-0.service
-
-# Stop
-sudo systemctl stop guardian@guardian-0.service
+git pull
+make install-systemd && make enable-systemd
+make network-up                      # NO deploy-anvil, NO clean of /solana/wormhole/data
+make network-status
 ```
 
-> **Note:** When using systemd, do not use `make start-*` / `make stop-*` — use `systemctl` commands instead. The hostname must already be set correctly before the service starts.
+### Operate
+
+```bash
+make network-status | make network-logs | make network-down
+sudo systemctl restart guardian@guardian-1.service
+```
+
+Use `make network-*` under systemd — not `make start-*` / `make stop-*` (those are nohup/manual).
+
+**Settlement impact:** none, when `GETH_CONTRACT` / L1 / Fuji / Solana addresses stay unchanged.
+Guardians keep the same deterministic keys (`unsafeDevMode` + hostname) and continue signing VAAs for the same Wormhole cores the node app already uses.
 
 ---
 

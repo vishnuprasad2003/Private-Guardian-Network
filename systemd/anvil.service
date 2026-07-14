@@ -3,25 +3,32 @@ Description=Anvil Local EVM Node (Guardian Registry Storage)
 Documentation=https://github.com/foundry-rs/foundry
 After=network-online.target
 Wants=network-online.target
-Before=guardian@guardian-0.service
+PartOf=guardian.target
 
 [Service]
 Type=simple
-User=azureuser
-Group=azureuser
-WorkingDirectory=/home/azureuser/Private-Guardian-Network
-Environment="WORKSPACE_ROOT=/home/azureuser/Private-Guardian-Network"
+User=__GUARDIAN_USER__
+Group=__GUARDIAN_GROUP__
+WorkingDirectory=__WORKSPACE_ROOT__
+Environment="WORKSPACE_ROOT=__WORKSPACE_ROOT__"
 Environment="PATH=/solana/wormhole/.foundry/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="FOUNDRY_CACHE_DIR=/solana/wormhole/.foundry/cache"
 Environment="FOUNDRY_DATA_DIR=/solana/wormhole/.foundry/data"
-ExecStart=/bin/bash -c 'source /home/azureuser/.bashrc && cd /home/azureuser/Private-Guardian-Network && ./scripts/start-anvil.sh'
-ExecStop=/bin/bash -c 'cd /home/azureuser/Private-Guardian-Network && ./scripts/stop-anvil.sh'
-Restart=on-failure
+
+# RUN_FOREGROUND=1 makes start-anvil.sh `exec` anvil so THIS is the tracked main
+# PID; Restart=on-failure then actually restarts the real process on a crash.
+ExecStart=/bin/bash -lc 'cd "__WORKSPACE_ROOT__"; export RUN_FOREGROUND=1; exec ./scripts/start-anvil.sh'
+
+# On stop, systemd sends SIGTERM to anvil; it flushes --state on clean shutdown.
+# Give it time to write anvil-state.json before SIGKILL.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+Restart=always
 RestartSec=10
 StartLimitIntervalSec=300
 StartLimitBurst=5
 
-# Logging: Both journald and file (file for persistence, journald for systemd integration)
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=anvil
@@ -33,4 +40,4 @@ MemoryAccounting=true
 CPUAccounting=true
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=multi-user.target guardian.target

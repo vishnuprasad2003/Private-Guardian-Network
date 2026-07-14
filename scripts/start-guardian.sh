@@ -26,15 +26,24 @@ if [[ "${UNSAFE_DEV_MODE:-false}" == "true" ]]; then
     }
 fi
 
-# ── Clean stale state (devMode always starts fresh) ─────────────────────────
-[[ -d "$DATA_DIR" ]] && { log_info "Cleaning previous data..."; rm -rf "$DATA_DIR"; }
-rm -f "$KEY_FILE" "$NODE_KEY_FILE" "$ADMIN_SOCKET" "$GRPC_SOCKET" 2>/dev/null || true
+# ── Clean stale state ───────────────────────────────────────────────────────
+# Manual `make start-N` (or CLEAN_START=1) wipes Badger dataDir for a fresh node.
+# Under systemd (RUN_FOREGROUND=1) we KEEP dataDir across crash/restarts.
+# unsafeDevMode always deletes the guardian key file: guardiand regenerates it from
+# hostname and FATALS with "refusing to override existing key" if the file remains.
+if [[ "${RUN_FOREGROUND:-0}" != "1" || "${CLEAN_START:-0}" == "1" ]]; then
+    [[ -d "$DATA_DIR" ]] && { log_info "Cleaning previous data..."; rm -rf "$DATA_DIR"; }
+    rm -f "$KEY_FILE" "$NODE_KEY_FILE" "$ADMIN_SOCKET" "$GRPC_SOCKET" 2>/dev/null || true
+fi
 mkdir -p "$DATA_DIR"
+rm -f "$ADMIN_SOCKET" "$GRPC_SOCKET" 2>/dev/null || true
+if [[ "${UNSAFE_DEV_MODE:-false}" == "true" ]]; then
+    rm -f "$KEY_FILE"
+fi
 
 # ── Log rotation (if log file exists and is large) ──────────────────────────
 LOG_MAX_SIZE="${LOG_MAX_SIZE:-100M}"
 if [[ -f "$LOG_FILE" ]]; then
-    # Check if log file exceeds max size (convert to bytes for comparison)
     if command_exists stat; then
         LOG_SIZE=$(stat -f%z "$LOG_FILE" 2>/dev/null || stat -c%s "$LOG_FILE" 2>/dev/null || echo "0")
         MAX_BYTES=$(echo "$LOG_MAX_SIZE" | sed 's/M$/*1024*1024/;s/K$/*1024/' | bc 2>/dev/null || echo "104857600")
@@ -43,15 +52,9 @@ if [[ -f "$LOG_FILE" ]]; then
             LOG_BACKUP="${LOG_FILE}.$(date +%Y%m%d_%H%M%S)"
             mv "$LOG_FILE" "$LOG_BACKUP"
             [[ "${LOG_COMPRESS:-false}" == "true" ]] && gzip "$LOG_BACKUP" 2>/dev/null || true
-            # Keep only last N files
             ls -t "${LOG_FILE}".* 2>/dev/null | tail -n +$((LOG_MAX_FILES + 1)) | xargs rm -f 2>/dev/null || true
         fi
     fi
-fi
-
-# In unsafeDevMode, delete old key so guardiand regenerates deterministically
-if [[ "${UNSAFE_DEV_MODE:-false}" == "true" ]]; then
-    rm -f "$KEY_FILE"
 fi
 
 # ── Build argument list ─────────────────────────────────────────────────────
@@ -81,6 +84,17 @@ ARGS=(
 
 # ── Launch ──────────────────────────────────────────────────────────────────
 log_info "Command: ${GUARDIAND_BIN} ${ARGS[*]}"
+
+# Foreground mode (RUN_FOREGROUND=1): used by systemd (Type=simple) so it tracks
+# the real guardiand PID and Restart=on-failure works. The systemd wrapper has
+# already placed us in a private UTS namespace with hostname=${GUARDIAN_NAME},
+# so the unsafeDevMode index check above has passed. Output goes to the journal.
+if [[ "${RUN_FOREGROUND:-0}" == "1" ]]; then
+    log_success "Launching ${GUARDIAN_NAME} in foreground (systemd-managed)"
+    exec "$GUARDIAND_BIN" "${ARGS[@]}"
+fi
+
+# ── Background mode (default, for `make start-N`) ───────────────────────────
 nohup "$GUARDIAND_BIN" "${ARGS[@]}" >> "$LOG_FILE" 2>&1 &
 echo "$!" > "$PID_FILE"
 sleep 3

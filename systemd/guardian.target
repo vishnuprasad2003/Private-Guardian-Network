@@ -1,0 +1,14 @@
+[Unit]
+Description=Private Wormhole Guardian Network (Anvil + 3 guardians)
+Documentation=https://github.com/wormhole-foundation/wormhole
+# Bring up the whole network with a single unit. `systemctl start guardian.target`
+# starts anvil + all three guardians (ordering/readiness enforced by the units);
+# `systemctl stop guardian.target` stops them all (PartOf= in each unit).
+Wants=anvil.service
+Wants=guardian@guardian-0.service
+Wants=guardian@guardian-1.service
+Wants=guardian@guardian-2.service
+After=anvil.service guardian@guardian-0.service guardian@guardian-1.service guardian@guardian-2.service
+
+[Install]
+WantedBy=multi-user.target

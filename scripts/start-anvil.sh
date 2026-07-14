@@ -94,6 +94,17 @@ else
     log_info "State saving: Every ${STATE_INTERVAL}s"
 fi
 
+# ── Foreground mode (RUN_FOREGROUND=1) ──────────────────────────────────────
+# Used by systemd (Type=simple): replace this shell with anvil so systemd tracks
+# the real PID and its Restart=on-failure policy works. Output goes to the
+# journal (systemd captures stdout/stderr); no nohup, no PID file, no & .
+if [[ "${RUN_FOREGROUND:-0}" == "1" ]]; then
+    log_info "Launching Anvil in foreground (systemd-managed)"
+    export FOUNDRY_CACHE_DIR FOUNDRY_DATA_DIR
+    exec $ANVIL_CMD
+fi
+
+# ── Background mode (default, for `make start-anvil`) ───────────────────────
 nohup env FOUNDRY_CACHE_DIR="$FOUNDRY_CACHE_DIR" \
           FOUNDRY_DATA_DIR="$FOUNDRY_DATA_DIR" \
     $ANVIL_CMD >> "$LOG_FILE" 2>&1 &

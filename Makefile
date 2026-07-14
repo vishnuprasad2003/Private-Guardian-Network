@@ -8,6 +8,8 @@
         stop-0 stop-1 stop-2 stop-all \
         logs logs-0 logs-1 logs-2 logs-anvil \
         status clean \
+        install-systemd enable-systemd disable-systemd \
+        network-up network-down network-status network-logs \
         upgrade upgrade-check upgrade-status backup
 
 # Default
@@ -41,6 +43,15 @@ help:
 	@echo "    make logs                 Tail all guardian logs"
 	@echo "    make logs-0 / logs-1 / logs-2 / logs-anvil"
 	@echo ""
+	@echo "  Systemd (production):"
+	@echo "    make install-systemd      Install units (user/path from whoami + CURDIR)"
+	@echo "    make enable-systemd       Enable on boot"
+	@echo "    make network-up           Start anvil + 3 guardians"
+	@echo "    make network-down         Stop network"
+	@echo "    make disable-systemd      Disable boot + stop (local teardown)"
+	@echo "    make network-status       Status"
+	@echo "    make network-logs         Follow journald"
+	@echo ""
 	@echo "  Maintenance:"
 	@echo "    make status               Show versions & running processes"
 	@echo "    make upgrade              Backup → pull → build → verify"
@@ -48,7 +59,9 @@ help:
 	@echo "    make backup               Create a backup"
 	@echo "    make clean                Remove data, logs, keys, pids"
 	@echo "    make clean-foundry        Migrate ~/.foundry to /solana/wormhole/.foundry"
-	@echo "    make install-systemd      Install systemd services + logrotate"
+	@echo ""
+	@echo "  WARNING: make deploy-anvil only on a fresh Anvil with no registry."
+	@echo "  Never deploy-anvil on the VM if GETH_CONTRACT is already live in anvil-state.json."
 	@echo ""
 
 # ─── Setup ──────────────────────────────────────────────────────────────────
@@ -73,6 +86,7 @@ stop-anvil:
 # ─── Deployment ─────────────────────────────────────────────────────────────
 
 deploy-anvil:
+	@echo "WARNING: only for empty Anvil. On the VM with an existing GETH_CONTRACT in anvil-state.json, skip this."
 	@./scripts/deploy-evm.sh anvil
 
 deploy-avalanche:
@@ -186,10 +200,55 @@ clean-foundry:
 			echo "Done."; \
 		fi'
 
+# Substituted into systemd unit templates at install time. Override on the
+# Azure host if needed: make install-systemd GUARDIAN_USER=azureuser WORKSPACE_ROOT=/home/azureuser/Private-Guardian-Network
+GUARDIAN_USER  ?= $(shell whoami)
+GUARDIAN_GROUP ?= $(shell id -gn)
+WORKSPACE_ROOT ?= $(CURDIR)
+HOME_DIR       ?= $(shell getent passwd $(GUARDIAN_USER) | cut -d: -f6)
+
 install-systemd:
-	@echo "Installing systemd services and logrotate..."
-	@sudo cp systemd/anvil.service /etc/systemd/system/ && \
-	 sudo cp systemd/guardian@.service /etc/systemd/system/ && \
+	@echo "Installing systemd services for user=$(GUARDIAN_USER) workspace=$(WORKSPACE_ROOT)..."
+	@chmod +x scripts/*.sh scripts/*.py 2>/dev/null || true
+	@tmpdir=$$(mktemp -d) && \
+	 GUARDIAN_USER='$(GUARDIAN_USER)' GUARDIAN_GROUP='$(GUARDIAN_GROUP)' \
+	 WORKSPACE_ROOT='$(WORKSPACE_ROOT)' HOME_DIR='$(HOME_DIR)' \
+	 python3 scripts/render-systemd-units.py "$$tmpdir" && \
+	 sudo cp "$$tmpdir/anvil.service" /etc/systemd/system/ && \
+	 sudo cp "$$tmpdir/guardian@.service" /etc/systemd/system/ && \
+	 sudo cp systemd/guardian.target /etc/systemd/system/ && \
 	 sudo cp systemd/logrotate.conf /etc/logrotate.d/wormhole-guardian && \
+	 rm -rf "$$tmpdir" && \
 	 sudo systemctl daemon-reload && \
-	 echo "Done. Services installed. Use 'systemctl enable/start' to activate."
+	 echo "Done. Next: 'make enable-systemd' then 'make network-up' (skip deploy-anvil if registry already exists)."
+
+# Enable the whole network to start on boot (anvil + 3 guardians via the target).
+enable-systemd:
+	@sudo systemctl enable anvil.service \
+	    guardian@guardian-0.service guardian@guardian-1.service guardian@guardian-2.service \
+	    guardian.target && \
+	 echo "Enabled. The guardian network now starts on boot and auto-restarts on failure."
+
+# Stop + disable boot (local teardown). Does not wipe BASE_DIR/data.
+disable-systemd:
+	@sudo systemctl stop guardian.target anvil.service
+	@sudo systemctl disable guardian.target anvil.service \
+	    guardian@guardian-0.service guardian@guardian-1.service guardian@guardian-2.service
+	@sudo systemctl reset-failed anvil.service \
+	    guardian@guardian-0.service guardian@guardian-1.service guardian@guardian-2.service 2>/dev/null || true
+	@echo "Stopped and disabled. Runtime data under /solana/wormhole was not deleted."
+
+# Start / stop / inspect the whole network through systemd (auto-restart active).
+network-up:
+	@sudo systemctl start guardian.target && echo "guardian.target started."
+
+network-down:
+	@sudo systemctl stop guardian.target && echo "guardian.target stopped."
+
+network-status:
+	@systemctl --no-pager status anvil.service \
+	    guardian@guardian-0.service guardian@guardian-1.service guardian@guardian-2.service || true
+
+network-logs:
+	@sudo journalctl -f -u anvil.service \
+	    -u guardian@guardian-0.service -u guardian@guardian-1.service -u guardian@guardian-2.service
